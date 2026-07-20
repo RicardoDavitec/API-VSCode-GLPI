@@ -1,5 +1,9 @@
 # pmf-dev-kit
 
+**Gitness:** [PMF-Integracao_GLPI/pmf-dev-kit](https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit)  
+**Clone:** `https://gitness.franca.sp.gov.br/git/PMF-Integracao_GLPI/pmf-dev-kit.git`  
+**Space:** [PMF-Integracao_GLPI](https://gitness.franca.sp.gov.br/spaces/PMF-Integracao_GLPI)
+
 Repositório **fonte** (template) da Prefeitura de Franca / PMF para bootstrap de gestão de projeto com:
 
 - integração **GLPI** (CLI, skills, hierarquia S/P);
