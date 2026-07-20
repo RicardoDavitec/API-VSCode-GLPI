@@ -1,0 +1,79 @@
+{
+  "template_id": "samu-s-phases",
+  "source": {
+    "label": "Fases S0–S7 do PLANO_IMPLEMENTACAO (tarefas pai)"
+  },
+  "defaults": {
+    "kind": "phase",
+    "projectstates_alias": "gep1",
+    "is_milestone": 1
+  },
+  "phases": [
+    {
+      "code": "S0",
+      "name": "S0 — Scaffold e infra",
+      "kind": "phase",
+      "percent_done": 100,
+      "state": "gep7",
+      "is_milestone": 1,
+      "content": "Fase S0 — Scaffold e infra.\nCheckpoint: docker compose + login + health OK."
+    },
+    {
+      "code": "S1",
+      "name": "S1 — MVP TARM + Monitor",
+      "kind": "phase",
+      "percent_done": 100,
+      "state": "gep7",
+      "is_milestone": 1,
+      "content": "Fase S1 — MVP operacional TARM + Monitor CRU."
+    },
+    {
+      "code": "S2",
+      "name": "S2 — Regulação médica + SIGS",
+      "kind": "phase",
+      "percent_done": 10,
+      "state": "gep1",
+      "content": "Fase S2 — Regulação médica e integração SIGS."
+    },
+    {
+      "code": "S3",
+      "name": "S3 — Radio operadores + despacho",
+      "kind": "phase",
+      "percent_done": 20,
+      "state": "gep1",
+      "content": "Fase S3 — RO, tempos normativos e despacho."
+    },
+    {
+      "code": "S4",
+      "name": "S4 — Unidade móvel + GPS MVP",
+      "kind": "phase",
+      "percent_done": 60,
+      "state": "gep3",
+      "content": "Fase S4 — GPS celular, estados de mobilidade, mapa ao vivo."
+    },
+    {
+      "code": "S5",
+      "name": "S5 — Frota, manutenção, CAN/AVL",
+      "kind": "phase",
+      "percent_done": 5,
+      "state": "gep1",
+      "content": "Fase S5 — Frota CNES, AVL, telemetria CAN."
+    },
+    {
+      "code": "S6",
+      "name": "S6 — Cadastro assistencial completo",
+      "kind": "phase",
+      "percent_done": 0,
+      "state": "gep1",
+      "content": "Fase S6 — Plantões, equipes, fichas."
+    },
+    {
+      "code": "S7",
+      "name": "S7 — Monitor avançado + estatísticas",
+      "kind": "phase",
+      "percent_done": 0,
+      "state": "gep1",
+      "content": "Fase S7 — Produção regulatória, estatísticas, painéis."
+    }
+  ]
+}

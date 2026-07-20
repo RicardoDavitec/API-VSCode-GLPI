@@ -1,0 +1,10 @@
+.glpi/state-project-*.json
+.glpi/project.yaml
+.glpi/workspace.yaml
+**/__pycache__/
+*.pyc
+.env
+*.log
+docs/06_glpi/retro-scans/*.json
+docs/06_glpi/retro-scans/*.md
+!docs/06_glpi/retro-scans/README.md

@@ -1,0 +1,61 @@
+{
+  "template_id": "corporate-phases",
+  "source": {
+    "label": "Template corporativo PMF — Discovery → Evolução"
+  },
+  "defaults": {
+    "projectstates_alias": "gep1",
+    "is_milestone": 0
+  },
+  "phases": [
+    {
+      "code": "1",
+      "name": "1. Discovery",
+      "percent_done": 100,
+      "state": "gep7",
+      "is_milestone": 1,
+      "content": "Fase Discovery.\nLevantamento de necessidades, escopo e riscos iniciais.\nMapa SAMU: S0 / início S1",
+      "samu_map": "S0 / início S1"
+    },
+    {
+      "code": "2",
+      "name": "2. Análise",
+      "percent_done": 100,
+      "state": "gep7",
+      "content": "Fase Análise.\nRequisitos, regras de negócio e decisões arquiteturais.\nMapa SAMU: S1–S2 (requisitos e SIGS)",
+      "samu_map": "S1–S2 (requisitos e SIGS)"
+    },
+    {
+      "code": "3",
+      "name": "3. Projeto",
+      "percent_done": 80,
+      "state": "gep3",
+      "content": "Fase Projeto.\nDesenho de solução, interfaces e planos de implementação.\nMapa SAMU: S1–S3 (TARM, monitor, RO)",
+      "samu_map": "S1–S3 (TARM, monitor, RO)"
+    },
+    {
+      "code": "4.1",
+      "name": "4.1 Implementação Front-end",
+      "percent_done": 60,
+      "state": "gep3",
+      "content": "Implementação Front-end.\nPainéis web, UX operacional e monitores.\nMapa SAMU: apps/web (S1, S3, S7)",
+      "samu_map": "apps/web (S1, S3, S7)"
+    },
+    {
+      "code": "4.2",
+      "name": "4.2 Implementação Back-end",
+      "percent_done": 50,
+      "state": "gep3",
+      "content": "Implementação Back-end.\nAPI, domínio, integrações e persistência.\nMapa SAMU: apps/backend (S1–S6)",
+      "samu_map": "apps/backend (S1–S6)"
+    },
+    {
+      "code": "5",
+      "name": "5. Evolução",
+      "percent_done": 10,
+      "state": "gep1",
+      "content": "Fase Evolução.\nMelhorias, telemetria avançada, estatísticas e estabilização.\nMapa SAMU: S4–S7 (GPS/AVL, frota, estatísticas)",
+      "samu_map": "S4–S7 (GPS/AVL, frota, estatísticas)"
+    }
+  ]
+}

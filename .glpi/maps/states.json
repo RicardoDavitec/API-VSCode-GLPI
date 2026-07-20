@@ -1,0 +1,44 @@
+{
+  "comment": "Mapa alias → projectstates_id. IDs descobertos via API (Project/ProjectTask). Completar missing_* na UI do GLPI se necessario.",
+  "updated_at": "2026-07-20",
+  "aliases": {
+    "em_andamento": 2,
+    "finalizado": 3,
+    "aguardando_resposta": 6,
+    "backlog": 18,
+    "em_desenvolvimento": 20,
+    "gep1": 8,
+    "gep1_produto_backlog": 8,
+    "gep3": 10,
+    "gep3_fazendo": 10,
+    "gep4": 11,
+    "gep4_testando": 11,
+    "gep7": 13,
+    "gep7_feito": 13,
+    "gep9": 15,
+    "gep9_fechado": 15
+  },
+  "by_id": {
+    "2": "Em andamento",
+    "3": "Finalizado",
+    "6": "Aguardando Resposta",
+    "8": "GEP 1. Produto Backlog",
+    "10": "GEP 3. Fazendo",
+    "11": "GEP 4. Testando",
+    "13": "GEP 7. Feito",
+    "15": "GEP 9. Fechado",
+    "18": "Backlog",
+    "20": "Em desenvolvimento"
+  },
+  "missing_aliases": {
+    "gep2": "GEP 2. Planejado (Sprint) — ID nao encontrado em amostra API; preencher apos consulta na UI",
+    "gep2_planejado_sprint": "idem",
+    "gep5": "GEP 5. Homologacao — ID nao encontrado em amostra API",
+    "gep5_homologacao": "idem",
+    "gep6": "GEP 6. Implantacao — ID nao encontrado em amostra API",
+    "gep6_implantacao": "idem",
+    "gep8": "GEP 8. Impedimento — ID nao encontrado em amostra API",
+    "gep8_impedimento": "idem"
+  },
+  "project_types_note": "projecttypes_id tipicamente 1 = Desenvolvimento e inovacao TI (validar no GLPI)"
+}

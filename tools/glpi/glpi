@@ -1,0 +1,791 @@
+#!/usr/bin/env bash
+# CLI MVP GLPI — gestão de chamados/tarefas (fora do domínio SAMU 195)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/task.sh
+source "${SCRIPT_DIR}/lib/task.sh"
+
+usage() {
+  cat <<'EOF'
+Uso: glpi <comando> [args]
+
+Comandos:
+  auth                     Inicia sessao e imprime session_token (teste)
+  ticket get [id]          Obtem chamado (default: .glpi/project.yaml)
+  ticket followup [id] <texto|->
+                           Envia ITILFollowup (texto ou stdin com -)
+  project get [id]         Obtem projeto GLPI
+  project tasks [id]       Lista ProjectTasks do projeto
+  project create [opcoes] [--apply]
+                           Cria Project GLPI (dry-run por padrao)
+  task get <id>            Obtem ProjectTask
+  task create|patch|upsert [opcoes] [--apply]
+                           ProjectTask (dry-run por padrao)
+  seed-phases [project_id] [--apply] [--template=samu-s-phases|corporate-phases]
+                           Seed ProjectTasks (pais S0–S7 ou template corporativo)
+  retro-scan [--workspace=PATH]
+                           Levantamento S(pai)/P(filho); gera JSON/MD
+  retro-apply --from=JSON [--apply] [--kinds=phase,item] [--limit=N]
+                           Aplica candidatos do scan em ordem pai→filho
+
+
+Opcoes project create:
+  --name=TEXTO (obrigatorio)
+  --code=TEXTO
+  --priority=1..6          (1 critica … 6 muito baixa; default 3)
+  --state=ALIAS|ID
+  --content=TEXTO
+  --comment=TEXTO
+  --plan-start= --plan-end= --real-start= --real-end=
+  --parent-project=ID      (projects_id / filho de)
+  --type-id=N              (projecttypes_id)
+  --json=ARQUIVO|-
+  --apply
+
+Opcoes comuns (create|patch|upsert):
+  --name=TEXTO
+  --code=CODIGO              (pai S4 | filho S4.P1; state local)
+  --kind=phase|item          (opcional; inferido do code)
+  --percent=0..100
+  --state=ALIAS|ID           (ver .glpi/maps/states.json)
+  --content=TEXTO
+  --plan-start=YYYY-MM-DD[ HH:MM:SS]
+  --plan-end=...
+  --real-start=...
+  --real-end=...
+  --milestone / --no-milestone
+  --parent-code=S4           (resolve ProjectTask pai no state)
+  --parent-task=ID           (ProjectTask pai por id)
+  --project=ID               (default: project.yaml)
+  --json=ARQUIVO|-           (payload JSON; mescla com flags)
+  --apply                    Grava no GLPI (sem isso = dry-run)
+
+Variaveis:
+  GLPI_USER_TOKEN   Token de usuario (senao le ~/.secrets/GLPI-tokens.txt)
+  GLPI_API_URL      Default: URL do arquivo de secrets
+  GLPI_APP_TOKEN    App-Token (Grupo)
+  GLPI_STATES_FILE  Mapa de estados (default .glpi/maps/states.json)
+  GLPI_DRY_RUN=1    Forca dry-run mesmo com --apply
+
+Exemplos:
+  ./tools/glpi/glpi seed-phases --template=samu-s-phases
+  ./tools/glpi/glpi task upsert --code=S4 --name="S4 — Unidade movel" --state=gep3 --percent=60
+  ./tools/glpi/glpi task upsert --code=S4.P5 --parent-code=S4 --name="Fila offline" --state=gep1 --percent=0
+  ./tools/glpi/glpi task upsert --code=S4.P5 --parent-code=S4 --name="Fila offline" --apply
+  ./tools/glpi/glpi retro-scan
+  ./tools/glpi/glpi retro-apply --from=docs/06_glpi/retro-scans/ULTIMO.json
+  ./tools/glpi/bin/glpi-retro-apply --from=... --codes=S4,S4.P5   # wrapper direto
+EOF
+}
+
+cmd_auth() {
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  jq -n --arg t "$GLPI_SESSION_TOKEN" --arg u "$GLPI_API_URL" \
+    '{session_token:$t, api:$u}'
+}
+
+cmd_ticket_get() {
+  local tid
+  tid="$(resolve_ticket_id "${1:-}")"
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  glpi_curl GET "/Ticket/${tid}?expand_dropdowns=true" | jq .
+}
+
+cmd_ticket_followup() {
+  local tid="${1:-}"
+  shift || true
+  local text is_private payload resp
+
+  if [[ "${1:-}" == "-" ]]; then
+    text="$(cat)"
+  else
+    text="$*"
+  fi
+  [[ -n "$text" ]] || die "texto do follow-up vazio"
+
+  tid="$(resolve_ticket_id "$tid")"
+  load_project_config
+  is_private=0
+  if [[ "$(yaml_get "${GLPI_PROJECT_FILE}" followup_private 2>/dev/null || echo false)" == "true" ]]; then
+    is_private=1
+  fi
+
+  payload="$(jq -n \
+    --arg content "$text" \
+    --argjson tid "$tid" \
+    --argjson priv "$is_private" \
+    '{input: {
+      itemtype: "Ticket",
+      items_id: $tid,
+      content: $content,
+      is_private: $priv
+    }}')"
+
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  resp="$(echo "$payload" | glpi_curl POST "/ITILFollowup/")"
+  echo "$resp" | jq .
+}
+
+cmd_project_get() {
+  local pid
+  pid="$(resolve_project_id "${1:-}")"
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  glpi_curl GET "/Project/${pid}?expand_dropdowns=true" | jq .
+}
+
+cmd_project_tasks() {
+  local pid state_file resp
+  pid="$(resolve_project_id "${1:-}")"
+  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+
+  # 1) Sub-itens (pode retornar [] em algumas instancias GLPI)
+  resp="$(glpi_curl GET "/Project/${pid}/ProjectTask?range=0-999" || true)"
+  if echo "$resp" | jq -e 'type=="array" and length>0' >/dev/null 2>&1; then
+    echo "$resp" | jq '[.[] | {id, name, percent_done, projects_id, date_mod}]'
+    return 0
+  fi
+
+  # 2) Estado local gravado pelo seed-phases
+  if [[ -f "$state_file" ]]; then
+    local ids out item tid
+    ids="$(jq -r '.tasks[].id' "$state_file")"
+    out='[]'
+    while IFS= read -r tid; do
+      [[ -z "$tid" ]] && continue
+      item="$(glpi_curl GET "/ProjectTask/${tid}" || true)"
+      if echo "$item" | jq -e --argjson p "$pid" 'type=="object" and .id and (.projects_id==$p or .projects_id==($p|tostring))' >/dev/null 2>&1; then
+        out="$(echo "$out" "$item" | jq -s '.[0] + [.[1] | {id, name, percent_done, projects_id, date_mod}]')"
+      fi
+    done <<<"$ids"
+    if echo "$out" | jq -e 'length>0' >/dev/null; then
+      echo "$out" | jq .
+      return 0
+    fi
+  fi
+
+  # 3) Fallback: pagina GET /ProjectTask filtrando projects_id (limitado)
+  local start=0 end=49 page=50 matched='[]' body code total
+  while [[ "$start" -lt 2000 ]]; do
+    end=$((start + page - 1))
+    body="$(curl -sS -D /tmp/glpi-headers.$$ -X GET \
+      -H "Content-Type: application/json" \
+      -H "Session-Token: ${GLPI_SESSION_TOKEN}" \
+      -H "App-Token: ${GLPI_APP_TOKEN}" \
+      "${GLPI_API_URL}/ProjectTask/?range=${start}-${end}")" || true
+    if ! echo "$body" | jq -e 'type=="array"' >/dev/null 2>&1; then
+      break
+    fi
+    matched="$(echo "$matched" "$body" | jq -s --argjson p "$pid" \
+      '.[0] + [.[1][] | select(.projects_id==$p) | {id, name, percent_done, projects_id, date_mod}]')"
+    total="$(grep -i '^Content-Range:' /tmp/glpi-headers.$$ | awk '{print $2}' | awk -F/ '{print $2}' | tr -d '\r' || true)"
+    rm -f /tmp/glpi-headers.$$
+    if [[ -n "$total" && "$end" -ge $((total - 1)) ]]; then
+      break
+    fi
+    # se ja achou as do seed tipicas, pode parar cedo quando pagina vazia de match e start alto
+    start=$((start + page))
+  done
+  rm -f /tmp/glpi-headers.$$ 2>/dev/null || true
+  echo "$matched" | jq .
+}
+
+cmd_seed_phases() {
+  local pid="" apply=0 template="" arg
+  for arg in "$@"; do
+    case "$arg" in
+      --apply) apply=1 ;;
+      --template=*) template="${arg#--template=}" ;;
+      -h|--help)
+        echo "Uso: glpi seed-phases [project_id] [--apply] [--template=samu-s-phases|corporate-phases]"
+        return 0
+        ;;
+      *)
+        if [[ "$arg" =~ ^[0-9]+$ ]]; then
+          pid="$arg"
+        else
+          die "argumento desconhecido: $arg"
+        fi
+        ;;
+    esac
+  done
+
+  pid="$(resolve_project_id "${pid:-}")"
+  load_project_config
+  template="${template:-${GLPI_CFG_PHASE_TEMPLATE:-samu-s-phases}}"
+
+  local tpl_file="${REPO_ROOT}/.glpi/templates/${template}.json"
+  [[ -f "$tpl_file" ]] || die "template nao encontrado: $tpl_file"
+
+  need_cmd jq
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+
+  local state_file names_json codes_json
+  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  names_json='[]'
+  codes_json='[]'
+  if [[ -f "$state_file" ]]; then
+    names_json="$(jq -c '[.tasks[].name]' "$state_file")"
+    codes_json="$(jq -c '[.tasks[].code|tostring]' "$state_file")"
+  fi
+
+  echo "Projeto alvo: ${pid}"
+  echo "Template: ${template}"
+  echo "Hierarquia: S=phase (pai) / P=item (filho via task upsert --parent-code)"
+  echo "Modo: $([[ "$apply" -eq 1 ]] && echo APPLY || echo DRY-RUN)"
+  echo
+
+  local phase name content percent code kind payload resp new_id
+  local created='[]'
+  if [[ -f "$state_file" ]]; then
+    created="$(jq -c '.tasks' "$state_file")"
+  fi
+
+  while IFS= read -r phase; do
+    name="$(echo "$phase" | jq -r '.name')"
+    content="$(echo "$phase" | jq -r '.content')"
+    percent="$(echo "$phase" | jq -r '.percent_done // 0')"
+    code="$(echo "$phase" | jq -r '.code')"
+    kind="$(echo "$phase" | jq -r '.kind // "phase"')"
+    state_alias="$(echo "$phase" | jq -r '.state // empty')"
+    milestone="$(echo "$phase" | jq -r '.is_milestone // empty')"
+
+    if echo "$codes_json" | jq -e --arg c "$code" 'index($c) != null' >/dev/null \
+      || echo "$names_json" | jq -e --arg n "$name" 'index($n) != null' >/dev/null; then
+      echo "SKIP  [${code}] ${name} (ja existe no state local)"
+      continue
+    fi
+
+    if [[ "$apply" -eq 0 ]]; then
+      echo "NEW   [${code}] kind=${kind} ${name} (state=${state_alias:-default} percent=${percent})"
+      continue
+    fi
+
+    local state_id=""
+    if [[ -n "$state_alias" && "$state_alias" != "null" ]]; then
+      state_id="$(resolve_state_id "$state_alias")"
+    fi
+
+    payload="$(jq -n \
+      --arg name "$name" \
+      --arg content "$content" \
+      --argjson pid "$pid" \
+      --argjson pct "$percent" \
+      --arg state "$state_id" \
+      --arg milestone "$milestone" \
+      '{input: (
+        {name:$name, content:$content, projects_id:$pid, percent_done:$pct}
+        | if ($state|length)>0 then . + {projectstates_id: ($state|tonumber)} else . end
+        | if ($milestone|length)>0 then . + {is_milestone: ($milestone|tonumber)} else . end
+      )}'
+    )"
+
+    resp="$(echo "$payload" | glpi_curl POST "/ProjectTask/")"
+    new_id="$(echo "$resp" | jq -r 'if type=="object" then .id // empty elif type=="array" then .[0].id // empty else empty end')"
+    if [[ -n "$new_id" && "$new_id" != "null" && "$new_id" != "false" ]]; then
+      echo "OK    [${code}] ${name} -> ProjectTask id=${new_id}"
+      created="$(echo "$created" | jq -c --argjson id "$new_id" --arg name "$name" --arg code "$code" --arg kind "$kind" \
+        '. + [{id:$id, name:$name, code:$code, kind:$kind, parent_code:null, parent_id:null}]')"
+      names_json="$(echo "$names_json" | jq -c --arg n "$name" '. + [$n]')"
+      codes_json="$(echo "$codes_json" | jq -c --arg c "$code" '. + [$c]')"
+    else
+      echo "FAIL  [${code}] ${name}: $resp" >&2
+    fi
+  done < <(jq -c '.phases[]' "$tpl_file")
+
+  if [[ "$apply" -eq 1 ]]; then
+    jq -n --argjson pid "$pid" --arg tpl "$template" --argjson tasks "$created" \
+      --arg at "$(date -Iseconds)" \
+      '{
+        project_id:$pid, template:$tpl, updated_at:$at,
+        hierarchy:"S=phase parent / P=item child",
+        tasks:$tasks
+      }' >"$state_file"
+    echo
+    echo "Estado gravado em ${state_file}"
+  else
+    echo
+    echo "Dry-run concluido. Use --apply apenas se houver itens NEW."
+  fi
+}
+
+normalize_glpi_datetime() {
+  local v="${1:-}"
+  [[ -z "$v" ]] && return 0
+  if [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "${v} 00:00:00"
+  else
+    echo "$v"
+  fi
+}
+
+infer_task_kind() {
+  local code="${1:-}" parent_code="${2:-}" kind="${3:-}"
+  if [[ -n "$kind" ]]; then
+    echo "$kind"
+    return 0
+  fi
+  if [[ "$code" =~ ^[Ss][0-9]+\.[Pp][0-9]+$ ]]; then
+    echo "item"
+    return 0
+  fi
+  if [[ "$code" =~ ^[Ss][0-9]+$ ]]; then
+    echo "phase"
+    return 0
+  fi
+  if [[ -n "$parent_code" ]]; then
+    echo "item"
+    return 0
+  fi
+  echo ""
+}
+
+resolve_task_parent_id() {
+  # resolve --parent-task ou --parent-code → id numerico (ou vazio)
+  local pid="${1:-}"
+  if [[ -n "${TASK_PARENT:-}" ]]; then
+    echo "$TASK_PARENT"
+    return 0
+  fi
+  if [[ -n "${TASK_PARENT_CODE:-}" ]]; then
+    local found
+    found="$(find_task_id_by_code "$TASK_PARENT_CODE" "$pid" || true)"
+    if [[ -z "$found" ]]; then
+      if [[ "${TASK_APPLY:-0}" -eq 0 ]]; then
+        echo "AVISO: pai --parent-code=${TASK_PARENT_CODE} nao esta no state local; dry-run sem projecttasks_id. Rode seed-phases --template=samu-s-phases --apply antes do --apply do filho." >&2
+        echo ""
+        return 0
+      fi
+      die "pai --parent-code=${TASK_PARENT_CODE} nao encontrado no state local (.glpi/state-project-${pid}.json). Rode seed-phases --template=samu-s-phases --apply antes."
+    fi
+    echo "$found"
+    return 0
+  fi
+  echo ""
+}
+
+# Parse flags comuns → preenche variaveis TASK_*
+parse_task_flags() {
+  TASK_APPLY=0
+  TASK_ID=""
+  TASK_NAME=""
+  TASK_CODE=""
+  TASK_KIND=""
+  TASK_PERCENT=""
+  TASK_STATE=""
+  TASK_CONTENT=""
+  TASK_PLAN_START=""
+  TASK_PLAN_END=""
+  TASK_REAL_START=""
+  TASK_REAL_END=""
+  TASK_MILESTONE=""
+  TASK_PARENT=""
+  TASK_PARENT_CODE=""
+  TASK_PROJECT=""
+  TASK_JSON=""
+  local arg
+  while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --apply) TASK_APPLY=1 ;;
+      --id=*) TASK_ID="${arg#--id=}" ;;
+      --name=*) TASK_NAME="${arg#--name=}" ;;
+      --code=*) TASK_CODE="${arg#--code=}" ;;
+      --kind=*) TASK_KIND="${arg#--kind=}" ;;
+      --percent=*|--percent-done=*) TASK_PERCENT="${arg#*=}" ;;
+      --state=*|--state-id=*) TASK_STATE="${arg#*=}" ;;
+      --content=*) TASK_CONTENT="${arg#--content=}" ;;
+      --plan-start=*) TASK_PLAN_START="$(normalize_glpi_datetime "${arg#--plan-start=}")" ;;
+      --plan-end=*) TASK_PLAN_END="$(normalize_glpi_datetime "${arg#--plan-end=}")" ;;
+      --real-start=*) TASK_REAL_START="$(normalize_glpi_datetime "${arg#--real-start=}")" ;;
+      --real-end=*) TASK_REAL_END="$(normalize_glpi_datetime "${arg#--real-end=}")" ;;
+      --milestone) TASK_MILESTONE=1 ;;
+      --no-milestone) TASK_MILESTONE=0 ;;
+      --parent-code=*) TASK_PARENT_CODE="${arg#--parent-code=}" ;;
+      --parent-task=*) TASK_PARENT="${arg#--parent-task=}" ;;
+      --project=*) TASK_PROJECT="${arg#--project=}" ;;
+      --json=*) TASK_JSON="${arg#--json=}" ;;
+      -h|--help) return 2 ;;
+      *)
+        if [[ "$arg" =~ ^[0-9]+$ && -z "$TASK_ID" ]]; then
+          TASK_ID="$arg"
+        else
+          die "flag desconhecida: $arg"
+        fi
+        ;;
+    esac
+  done
+  if [[ "${GLPI_DRY_RUN:-0}" == "1" ]]; then
+    TASK_APPLY=0
+  fi
+  TASK_KIND="$(infer_task_kind "$TASK_CODE" "$TASK_PARENT_CODE" "$TASK_KIND")"
+}
+
+build_task_input() {
+  local pid state_id="" parent_id=""
+  pid="$(resolve_project_id "${TASK_PROJECT:-}")"
+  parent_id="$(resolve_task_parent_id "$pid")"
+  TASK_PARENT_RESOLVED="$parent_id"
+
+  if [[ -n "$TASK_STATE" ]]; then
+    state_id="$(resolve_state_id "$TASK_STATE")"
+  fi
+
+  local base='{}'
+  if [[ -n "$TASK_JSON" ]]; then
+    if [[ "$TASK_JSON" == "-" ]]; then
+      base="$(cat)"
+    else
+      [[ -f "$TASK_JSON" ]] || die "arquivo JSON nao encontrado: $TASK_JSON"
+      base="$(cat "$TASK_JSON")"
+    fi
+    if echo "$base" | jq -e 'type=="object" and (.input|type=="object")' >/dev/null 2>&1; then
+      base="$(echo "$base" | jq '.input')"
+    fi
+  fi
+
+  if [[ -n "$TASK_PARENT_CODE" || -n "$parent_id" ]]; then
+    echo "Hierarquia: kind=${TASK_KIND:-?} code=${TASK_CODE:-?} parent_code=${TASK_PARENT_CODE:--} parent_id=${parent_id:--}" >&2
+  fi
+
+  jq -n \
+    --argjson base "$base" \
+    --argjson projects_id "$pid" \
+    --arg name "${TASK_NAME}" \
+    --arg content "${TASK_CONTENT}" \
+    --arg percent "${TASK_PERCENT}" \
+    --arg plan_start "${TASK_PLAN_START}" \
+    --arg plan_end "${TASK_PLAN_END}" \
+    --arg real_start "${TASK_REAL_START}" \
+    --arg real_end "${TASK_REAL_END}" \
+    --arg milestone "${TASK_MILESTONE}" \
+    --arg parent "${parent_id}" \
+    --arg state "${state_id}" \
+    '
+    def put($k; $v): if ($v|tostring|length)>0 and $v!="null" then . + {($k): $v} else . end;
+    def putn($k; $v): if ($v|tostring|length)>0 and $v!="null" then . + {($k): ($v|tonumber)} else . end;
+    $base
+    | . + {projects_id: $projects_id}
+    | put("name"; $name)
+    | put("content"; $content)
+    | putn("percent_done"; $percent)
+    | put("plan_start_date"; $plan_start)
+    | put("plan_end_date"; $plan_end)
+    | put("real_start_date"; $real_start)
+    | put("real_end_date"; $real_end)
+    | putn("is_milestone"; $milestone)
+    | putn("projecttasks_id"; $parent)
+    | putn("projectstates_id"; $state)
+    '
+}
+
+task_do_create() {
+  local input payload resp new_id pid parent_resolved=""
+  input="$(build_task_input)"
+  # build_task_input roda em subshell via $() — recuperar pai do payload
+  parent_resolved="$(echo "$input" | jq -r '.projecttasks_id // empty')"
+  TASK_PARENT_RESOLVED="$parent_resolved"
+  if ! echo "$input" | jq -e '.name|type=="string" and (length>0)' >/dev/null; then
+    die "create/upsert exige --name= (ou name no --json)"
+  fi
+  pid="$(echo "$input" | jq -r '.projects_id')"
+  payload="$(jq -n --argjson input "$input" '{input: $input}')"
+
+  echo "Modo: $([[ "$TASK_APPLY" -eq 1 ]] && echo APPLY || echo DRY-RUN)"
+  echo "Payload:"
+  echo "$payload" | jq .
+
+  if [[ "$TASK_APPLY" -eq 0 ]]; then
+    echo
+    echo "Dry-run. Reexecute com --apply para criar."
+    return 0
+  fi
+
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  resp="$(echo "$payload" | glpi_curl POST "/ProjectTask/")"
+  echo "$resp" | jq .
+  new_id="$(echo "$resp" | jq -r 'if type=="object" then .id // empty elif type=="array" then .[0].id // empty else empty end')"
+  if [[ -n "$new_id" && "$new_id" != "null" && "$new_id" != "false" ]]; then
+    append_task_to_state "$pid" "$new_id" "$(echo "$input" | jq -r '.name')" \
+      "${TASK_CODE}" "${TASK_KIND}" "${TASK_PARENT_CODE}" "${parent_resolved}"
+    echo "Estado local atualizado (.glpi/state-project-${pid}.json)"
+  fi
+}
+
+task_do_patch() {
+  local tid="$1"
+  local input payload resp
+  input="$(build_task_input)"
+  payload="$(jq -n --argjson input "$input" '{input: $input}')"
+
+  echo "ProjectTask id=${tid}"
+  echo "Modo: $([[ "$TASK_APPLY" -eq 1 ]] && echo APPLY || echo DRY-RUN)"
+  echo "Payload:"
+  echo "$payload" | jq .
+
+  if [[ "$TASK_APPLY" -eq 0 ]]; then
+    echo
+    echo "Dry-run. Reexecute com --apply para atualizar."
+    return 0
+  fi
+
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  resp="$(echo "$payload" | glpi_curl PUT "/ProjectTask/${tid}")"
+  echo "$resp" | jq .
+  echo "--- apos ---"
+  glpi_curl GET "/ProjectTask/${tid}?expand_dropdowns=true" | jq '{
+    id, name, percent_done, projectstates_id, plan_start_date, plan_end_date,
+    real_start_date, real_end_date, is_milestone, projecttasks_id, projects_id
+  }'
+}
+
+cmd_task_get() {
+  local tid="${1:-}"
+  [[ -n "$tid" ]] || die "informe o id da ProjectTask"
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  glpi_curl GET "/ProjectTask/${tid}?expand_dropdowns=true" | jq .
+}
+
+cmd_task_create() {
+  parse_task_flags "$@" || { echo "Uso: glpi task create --name=... [--state=...] [--percent=...] [--apply]"; return 0; }
+  task_do_create
+}
+
+cmd_task_patch() {
+  parse_task_flags "$@" || { echo "Uso: glpi task patch <id> [--percent=...] [--state=...] [--apply]"; return 0; }
+  [[ -n "$TASK_ID" ]] || die "informe o id: glpi task patch <id> ..."
+  task_do_patch "$TASK_ID"
+}
+
+cmd_task_upsert() {
+  parse_task_flags "$@" || {
+    echo "Uso: glpi task upsert --code=S4|--code=S4.P1 [--parent-code=S4] [--name=...] [opcoes] [--apply]"
+    return 0
+  }
+
+  local pid resolved=""
+  pid="$(resolve_project_id "${TASK_PROJECT:-}")"
+
+  if [[ -n "$TASK_ID" ]]; then
+    resolved="$TASK_ID"
+  elif [[ -n "$TASK_CODE" ]]; then
+    resolved="$(find_task_id_by_code "$TASK_CODE" "$pid" || true)"
+  elif [[ -n "$TASK_NAME" ]]; then
+    resolved="$(find_task_id_by_name "$TASK_NAME" "$pid" || true)"
+  fi
+
+  if [[ -n "$resolved" ]]; then
+    echo "Upsert → PATCH id=${resolved} (code=${TASK_CODE:--} kind=${TASK_KIND:-})"
+    task_do_patch "$resolved"
+    if [[ "$TASK_APPLY" -eq 1 ]]; then
+      # recuperar pai do ultimo build (subshell); resolver de novo se preciso
+      local parent_resolved=""
+      parent_resolved="$(resolve_task_parent_id "$pid" 2>/dev/null || true)"
+      append_task_to_state "$pid" "$resolved" "${TASK_NAME:-}" \
+        "${TASK_CODE}" "${TASK_KIND}" "${TASK_PARENT_CODE}" "${parent_resolved}"
+    fi
+  else
+    echo "Upsert → CREATE (nenhum id/code/name no state local; kind=${TASK_KIND:-})"
+    task_do_create
+  fi
+}
+
+cmd_project_create() {
+  local apply=0 name="" code="" priority="3" state="" content="" comment=""
+  local plan_start="" plan_end="" real_start="" real_end="" parent="" type_id="" json=""
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --apply) apply=1 ;;
+      --name=*) name="${arg#--name=}" ;;
+      --code=*) code="${arg#--code=}" ;;
+      --priority=*) priority="${arg#--priority=}" ;;
+      --state=*|--state-id=*) state="${arg#*=}" ;;
+      --content=*) content="${arg#--content=}" ;;
+      --comment=*) comment="${arg#--comment=}" ;;
+      --plan-start=*) plan_start="$(normalize_glpi_datetime "${arg#--plan-start=}")" ;;
+      --plan-end=*) plan_end="$(normalize_glpi_datetime "${arg#--plan-end=}")" ;;
+      --real-start=*) real_start="$(normalize_glpi_datetime "${arg#--real-start=}")" ;;
+      --real-end=*) real_end="$(normalize_glpi_datetime "${arg#--real-end=}")" ;;
+      --parent-project=*) parent="${arg#--parent-project=}" ;;
+      --type-id=*) type_id="${arg#--type-id=}" ;;
+      --json=*) json="${arg#--json=}" ;;
+      -h|--help)
+        echo "Uso: glpi project create --name=... [--code=...] [--state=gep1] [--priority=3] [--apply]"
+        return 0
+        ;;
+      *) die "flag desconhecida: $arg" ;;
+    esac
+  done
+  [[ "${GLPI_DRY_RUN:-0}" == "1" ]] && apply=0
+
+  local base='{}' state_id=""
+  if [[ -n "$json" ]]; then
+    if [[ "$json" == "-" ]]; then base="$(cat)"; else base="$(cat "$json")"; fi
+    if echo "$base" | jq -e '.input|type=="object"' >/dev/null 2>&1; then
+      base="$(echo "$base" | jq '.input')"
+    fi
+  fi
+  if [[ -n "$state" ]]; then
+    state_id="$(resolve_state_id "$state")"
+  fi
+
+  local input payload resp new_id
+  input="$(jq -n \
+    --argjson base "$base" \
+    --arg name "$name" \
+    --arg code "$code" \
+    --arg priority "$priority" \
+    --arg content "$content" \
+    --arg comment "$comment" \
+    --arg plan_start "$plan_start" \
+    --arg plan_end "$plan_end" \
+    --arg real_start "$real_start" \
+    --arg real_end "$real_end" \
+    --arg parent "$parent" \
+    --arg type_id "$type_id" \
+    --arg state "$state_id" \
+    '
+    def put($k;$v): if ($v|tostring|length)>0 then . + {($k):$v} else . end;
+    def putn($k;$v): if ($v|tostring|length)>0 then . + {($k):($v|tonumber)} else . end;
+    $base
+    | put("name"; $name)
+    | put("code"; $code)
+    | putn("priority"; $priority)
+    | put("content"; $content)
+    | put("comment"; $comment)
+    | put("plan_start_date"; $plan_start)
+    | put("plan_end_date"; $plan_end)
+    | put("real_start_date"; $real_start)
+    | put("real_end_date"; $real_end)
+    | putn("projects_id"; $parent)
+    | putn("projecttypes_id"; $type_id)
+    | putn("projectstates_id"; $state)
+    ')"
+
+  if ! echo "$input" | jq -e '.name|type=="string" and length>0' >/dev/null; then
+    die "project create exige --name="
+  fi
+  payload="$(jq -n --argjson input "$input" '{input:$input}')"
+  echo "Modo: $([[ "$apply" -eq 1 ]] && echo APPLY || echo DRY-RUN)"
+  echo "$payload" | jq .
+  if [[ "$apply" -eq 0 ]]; then
+    echo "Dry-run. Reexecute com --apply para criar o Project."
+    return 0
+  fi
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  resp="$(echo "$payload" | glpi_curl POST "/Project/")"
+  echo "$resp" | jq .
+  new_id="$(echo "$resp" | jq -r '.id // empty')"
+  if [[ -n "$new_id" ]]; then
+    echo "Project criado id=${new_id}"
+    echo "Atualize .glpi/project.yaml com project_id: ${new_id} se for o projeto ativo."
+  fi
+}
+
+cmd_retro_scan() {
+  local workspace="${REPO_ROOT}/.glpi/workspace.yaml" apply=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --apply) apply=1 ;;
+      --workspace=*) workspace="${arg#--workspace=}" ;;
+      -h|--help)
+        echo "Uso: glpi retro-scan [--workspace=.glpi/workspace.yaml]"
+        echo "  Gera JSON/MD. Para gravar no GLPI: glpi retro-apply --from=JSON [--apply]"
+        return 0
+        ;;
+      *) die "flag desconhecida: $arg" ;;
+    esac
+  done
+  [[ -f "$workspace" ]] || die "workspace nao encontrado: $workspace"
+  need_cmd python3
+  local out_dir="${REPO_ROOT}/docs/06_glpi/retro-scans"
+  local args=(--workspace "$workspace" --repo-root "$REPO_ROOT" --out-dir "$out_dir")
+  [[ "$apply" -eq 1 ]] && args+=(--apply)
+  python3 "${SCRIPT_DIR}/lib/retro_scan.py" "${args[@]}"
+}
+
+cmd_retro_apply() {
+  local from="" apply=0 extra=() arg
+  for arg in "$@"; do
+    case "$arg" in
+      --from=*) from="${arg#--from=}" ;;
+      --apply) apply=1; extra+=(--apply) ;;
+      --include-skip|--continue-on-error) extra+=("$arg") ;;
+      --kinds=*|--limit=*|--codes=*|--glpi-bin=*) extra+=("$arg") ;;
+      -h|--help)
+        echo "Uso: glpi retro-apply --from=PATH.json [--apply] [--kinds=phase,item] [--codes=S4] [--limit=N]"
+        echo "  Dry-run por padrao. Ordem: pais (S) depois filhos (P)."
+        return 0
+        ;;
+      *) die "flag desconhecida: $arg" ;;
+    esac
+  done
+  [[ -n "$from" ]] || die "informe --from=arquivo.json (saida do retro-scan)"
+  [[ -f "$from" ]] || die "arquivo nao encontrado: $from"
+  need_cmd python3
+  python3 "${SCRIPT_DIR}/lib/retro_apply.py" --from="$from" --glpi-bin="${SCRIPT_DIR}/glpi" "${extra[@]}"
+}
+
+main() {
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    ""|-h|--help|help) usage ;;
+    auth) cmd_auth "$@" ;;
+    ticket)
+      local sub="${1:-}"
+      shift || true
+      case "$sub" in
+        get) cmd_ticket_get "$@" ;;
+        followup)
+          local tid="${1:-}"
+          shift || true
+          cmd_ticket_followup "$tid" "$@"
+          ;;
+        *) die "subcomando ticket invalido. Use: get | followup" ;;
+      esac
+      ;;
+    project)
+      local sub="${1:-}"
+      shift || true
+      case "$sub" in
+        get) cmd_project_get "$@" ;;
+        tasks) cmd_project_tasks "$@" ;;
+        create) cmd_project_create "$@" ;;
+        *) die "subcomando project invalido. Use: get | tasks | create" ;;
+      esac
+      ;;
+    task)
+      local sub="${1:-}"
+      shift || true
+      case "$sub" in
+        get) cmd_task_get "$@" ;;
+        create) cmd_task_create "$@" ;;
+        patch) cmd_task_patch "$@" ;;
+        upsert) cmd_task_upsert "$@" ;;
+        *) die "subcomando task invalido. Use: get | create | patch | upsert" ;;
+      esac
+      ;;
+    seed-phases) cmd_seed_phases "$@" ;;
+    retro-scan) cmd_retro_scan "$@" ;;
+    retro-apply) cmd_retro_apply "$@" ;;
+    *) die "comando desconhecido: $cmd (use --help)" ;;
+  esac
+}
+
+main "$@"

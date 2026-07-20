@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Wrapper direto — cria/atualiza ProjectTask (S pai / P filho).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+exec "$ROOT/tools/glpi/glpi" task upsert "$@"

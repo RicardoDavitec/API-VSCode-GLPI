@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Wrapper direto — ITILFollowup no Ticket.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Uso: glpi-followup [ticket_id] "texto"   OU   glpi-followup - <<< texto
+exec "$ROOT/tools/glpi/glpi" ticket followup "$@"

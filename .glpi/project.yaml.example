@@ -1,0 +1,8 @@
+# Copiar para project.yaml no produto (sem secrets)
+key: meu-produto
+ticket_id: 0
+project_id: 0
+entity_hint: "Prefeitura de Franca"
+location_hint: ""
+phase_template: corporate-phases
+followup_private: false

@@ -1,0 +1,10 @@
+bundle: meu-produto
+glpi:
+  ticket_id: 0
+  project_id: 0
+repos:
+  - id: meu-produto
+    path: /caminho/absoluto/do/clone
+    role: primary
+    weight: 1.0
+scanners: [plan, checklist, todolist, commit, branch]

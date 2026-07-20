@@ -1,0 +1,42 @@
+# Integracao SKILLs IA — Projeto <-> GLPI
+
+> Hierarquia canonica: **S = tarefa pai** · **P = subtarefa filho**.
+> Detalhe: `HIERARQUIA_S_P_GLPI.md`
+
+## Relacao entre entidades
+
+| Entidade | Ambiente | Documentacao | Nivel | Acao |
+|----------|----------|--------------|-------|------|
+| VSCode (Agente IA) | Projeto (Win ou WSL) | Plano / checklist / todolist | Fase/semana **(S)** ? Item **(P)** | Finalizacao de tarefa |
+| Git (GitHub / Gitness) | Repositorio | Arquivo md e/ou historico | — | Commit (push) / pull |
+| GLPI | Projeto | Lista de tarefas do projeto | Tarefa **(pai)** ? Subtarefa **(filho)** | Cria / atualiza tarefa |
+
+## Skills e scripts (execucao direta)
+
+As skills **orquestram** os wrappers em `tools/glpi/bin/` (podem ser chamados sem skill):
+
+| Skill | Script | Papel |
+|-------|--------|-------|
+| `glpi-project-create` | `bin/glpi-project-create` | Gera **Project** (projeto novo) |
+| `glpi-retro-scan` | `bin/glpi-retro-scan` | Candidatos S/P a partir de markdown (mono/polyrepo) |
+| (pos-scan) | `bin/glpi-retro-apply` | Aplica JSON em ordem pai?filho |
+| `glpi-task-upsert` | `bin/glpi-task-upsert` | Cria/atualiza pai ou filho |
+| `glpi-followup` | `bin/glpi-followup` | Evidencia no Ticket |
+| — | `bin/glpi-seed-phases` | Seed pais S0–S7 |
+
+## Campos GLPI pertinentes (resumo)
+
+**Project:** nome, codigo, prioridade, estado GEP, %, datas, descricao, filho de (projeto pai).
+
+**ProjectTask:** nome, projeto, **filho de** (`projecttasks_id`), estado GEP, %, marco, datas, descricao.
+
+## CLI rapido
+
+```bash
+./tools/glpi/bin/glpi-project-create --name="..." --code=... --state=gep1
+./tools/glpi/bin/glpi-seed-phases --template=samu-s-phases
+./tools/glpi/bin/glpi-retro-scan
+./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
+./tools/glpi/bin/glpi-task-upsert --code=S4.P5 --parent-code=S4 --name="..." --state=gep3 --percent=40
+./tools/glpi/bin/glpi-followup - "[S4.P5] resumo + sha"
+```

@@ -1,0 +1,46 @@
+# Plano de implementação {{NOME_PRODUTO}}
+
+> Atualizado: 20/07/2026 — modelo alinhado à hierarquia GLPI (**S** = tarefa pai · **P** = subtarefa)  
+> Anterior: 15/07/2026 — S1 concluída (mapa embarque na tela TARM)
+
+## Objetivo
+
+Entregar MVP operacional testável (TARM + monitor + GPS celular viatura teste) e evoluir até produção completa conforme 30 requisitos de negócio (21 obrigatórios).
+
+## Modelo de campos (plano ↔ GLPI)
+
+Hierarquia: **fase/semana `Sn`** = tarefa de projeto (pai) · **item `Sn.Pm`** = subtarefa (filho).
+
+| Campo no plano | Obrig. | GLPI `ProjectTask` | Notas |
+|----------------|--------|--------------------|-------|
+| `ID` | sim | `code` (+ `projecttasks_id` se P) | `S4` ou `S4.P5` |
+| `Item` | sim | `name` | Título curto |
+| `Status` | sim | (derivado) | `[ ]` pendente · `[~]` parcial · `[x]` concluído |
+| `%` | sim | `percent_done` | 0–100 |
+| `Plan ini` | recomendado | `plan_start_date` | `YYYY-MM-DD` ou `YYYY-MM-DD HH:MM` |
+| `Plan fim` | recomendado | `plan_end_date` | idem |
+| `Real ini` | ao iniciar | `real_start_date` | Preencher no início efetivo |
+| `Real fim` | ao concluir | `real_end_date` | Preencher no fechamento |
+| `Critério` | sim | `content` (trecho) | Critério de teste / aceite |
+| `GEP` | recomendado | `projectstates_id` | Alias: `gep1` backlog · `gep3` fazendo · `gep4` testando · `gep7` feito · `gep9` fechado |
+
+**Cabeçalho de fase (pai):** bloco `Meta fase` (tabela Campo/Valor) com os mesmos campos temporais e `%` da fase.
+
+**Convenções:**
+- Datas vazias: `—`
+- `%` da fase = média dos itens (ou valor explícito no cabeçalho)
+- Sync GLPI: `./tools/glpi/bin/glpi-task-upsert` / `glpi-retro-apply` (ver `docs/00-GLPI/HIERARQUIA_S_P_GLPI.md`)
+
+### Legenda de status
+
+- `[ ]` Pendente · `[~]` Parcial · `[x]` Concluído
+
+---
+
+
+---
+
+## Fase 0 — {{titulo}} (S0)
+
+> Duplique a tabela modelo do cabeçalho (Meta fase + itens `S0.P1`…).
+> Remova este exemplo e renomeie para `PLANO_IMPLEMENTACAO.md` no produto.
