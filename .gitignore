@@ -1,6 +1,7 @@
 .glpi/state-project-*.json
 .glpi/project.yaml
 .glpi/workspace.yaml
+.glpi/instance.yaml
 **/__pycache__/
 *.pyc
 .env

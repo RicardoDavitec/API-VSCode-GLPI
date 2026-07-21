@@ -30,6 +30,8 @@ Comandos:
                            Levantamento S(pai)/P(filho); gera JSON/MD
   retro-apply --from=JSON [--apply] [--kinds=phase,item] [--limit=N]
                            Aplica candidatos do scan em ordem pai→filho
+  states discover [--apply] [--preset=NOME] [--out=ARQUIVO]
+                           Descobre ProjectState via API e gera maps/states.json
 
 
 Opcoes project create:
@@ -77,6 +79,7 @@ Exemplos:
   ./tools/glpi/glpi task upsert --code=S4.P5 --parent-code=S4 --name="Fila offline" --apply
   ./tools/glpi/glpi retro-scan
   ./tools/glpi/glpi retro-apply --from=docs/06_glpi/retro-scans/ULTIMO.json
+  ./tools/glpi/glpi states discover --apply
   ./tools/glpi/bin/glpi-retro-apply --from=... --codes=S4,S4.P5   # wrapper direto
 EOF
 }
@@ -697,6 +700,38 @@ cmd_project_create() {
   fi
 }
 
+cmd_states_discover() {
+  local apply=0 preset="" out="" extra=() arg
+  load_project_config
+  preset="${GLPI_CFG_PRESET:-api-vscode-glpi}"
+  for arg in "$@"; do
+    case "$arg" in
+      --apply) apply=1 ;;
+      --preset=*) preset="${arg#--preset=}" ;;
+      --out=*) out="${arg#--out=}" ;;
+      -h|--help)
+        echo "Uso: glpi states discover [--apply] [--preset=api-vscode-glpi|generic] [--out=.glpi/maps/states.json]"
+        echo "  Consulta GET /ProjectState/ e gera mapa alias -> projectstates_id."
+        return 0
+        ;;
+      *) die "flag desconhecida: $arg" ;;
+    esac
+  done
+  need_cmd python3
+  extra=(--repo-root "$REPO_ROOT" --preset "$preset")
+  [[ -n "$out" ]] && extra+=(--out "$out")
+  [[ -n "${GLPI_SECRETS_FILE:-}" ]] && extra+=(--secrets-file "$GLPI_SECRETS_FILE")
+  [[ -n "${GLPI_SECRETS_FORMAT:-}" ]] && extra+=(--secrets-format "$GLPI_SECRETS_FORMAT")
+  [[ -n "${GLPI_API_URL:-}" ]] && extra+=(--api-url "$GLPI_API_URL")
+  [[ -n "${GLPI_USER_TOKEN:-}" ]] && extra+=(--user-token "$GLPI_USER_TOKEN")
+  [[ -n "${GLPI_APP_TOKEN:-}" ]] && extra+=(--app-token "$GLPI_APP_TOKEN")
+  load_credentials
+  extra+=(--api-url "$GLPI_API_URL" --user-token "$GLPI_USER_TOKEN")
+  [[ -n "${GLPI_APP_TOKEN:-}" ]] && extra+=(--app-token "$GLPI_APP_TOKEN")
+  [[ "$apply" -eq 1 ]] && extra+=(--apply)
+  python3 "${SCRIPT_DIR}/lib/states_discover.py" "${extra[@]}"
+}
+
 cmd_retro_scan() {
   local workspace="${REPO_ROOT}/.glpi/workspace.yaml" apply=0 arg
   for arg in "$@"; do
@@ -784,6 +819,14 @@ main() {
     seed-phases) cmd_seed_phases "$@" ;;
     retro-scan) cmd_retro_scan "$@" ;;
     retro-apply) cmd_retro_apply "$@" ;;
+    states)
+      local sub="${1:-}"
+      shift || true
+      case "$sub" in
+        discover) cmd_states_discover "$@" ;;
+        *) die "subcomando states invalido. Use: discover" ;;
+      esac
+      ;;
     *) die "comando desconhecido: $cmd (use --help)" ;;
   esac
 }

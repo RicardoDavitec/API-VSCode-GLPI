@@ -2,7 +2,12 @@
 key: meu-produto
 ticket_id: 0
 project_id: 0
-entity_hint: "Prefeitura de Franca"
+entity_hint: ""
 location_hint: ""
 phase_template: corporate-phases
 followup_private: false
+
+# Exemplo PMF Franca (equipe interna):
+# entity_hint: "Prefeitura de Franca"
+# ticket_id: 10554
+# project_id: 72

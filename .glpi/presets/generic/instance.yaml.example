@@ -1,0 +1,21 @@
+# Preset generic — qualquer instancia GLPI com API REST habilitada
+
+preset: generic
+label: "GLPI generico (qualquer instancia)"
+
+glpi:
+  api_url: ""                    # informar na instalacao
+  ui_url: ""
+  require_app_token: false       # ajustar se a instancia exigir App-Token
+
+secrets:
+  file: "~/.secrets/GLPI-tokens.txt"
+  format: generic
+
+states:
+  map_file: ".glpi/maps/states.json"
+  auto_discover: true
+
+workflow:
+  hierarchy: s_p
+  phase_template: generic-phases

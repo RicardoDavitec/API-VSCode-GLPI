@@ -4,32 +4,52 @@
 **Clone:** `https://gitness.franca.sp.gov.br/git/PMF-Integracao_GLPI/pmf-dev-kit.git`  
 **Space:** [PMF-Integracao_GLPI](https://gitness.franca.sp.gov.br/spaces/PMF-Integracao_GLPI)  
 **API GLPI:** `https://suporte.franca.sp.gov.br/apirest.php`  
-**Última atualização:** 21/07/2026
+**Última atualização:** 21/07/2026  
+**Autor:** [Dr. Ricardo David](AUTHORS.md) · **Patrocínio:** PMF — DTI · **Licença:** [MIT](LICENSE)
 
-Repositório **fonte** (template) da Prefeitura de Franca / PMF para bootstrap de gestão de projeto com integração **GLPI**, skills Cursor e árvore padronizada de `docs/`.
+Repositório **fonte** para integração **GLPI** com qualquer instância compatível com a API REST.  
+**Preset default:** `api-vscode-glpi` (triângulo VSCode/Cursor ↔ Git ↔ GLPI).  
+**Exemplificação:** equipe PMF Franca — [suporte.franca.sp.gov.br](https://suporte.franca.sp.gov.br/front/login.php).
 
-> Cópia canônica deste manual (para bootstrap em produtos): [`docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`](docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md).  
+> Manual em produtos: [`docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`](docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md)  
 > Secrets: `~/.secrets/GLPI-tokens.txt` — **nunca** neste repositório.
+
+### Instalação rápida (assistentes)
+
+```bash
+# Interativo (recomendado — equipe PMF)
+./scripts/install-glpi.sh
+
+# Flags (CI / automação)
+./scripts/install-glpi.sh --target=~/projetos/meu-app --preset=api-vscode-glpi --non-interactive --yes
+
+# Wizard Python (Windows / discover isolado)
+python3 scripts/install_glpi.py
+python3 scripts/install_glpi.py --discover-only --target=~/projetos/meu-app --yes
+```
 
 ---
 
 ## Sumário
 
 1. [O que é este kit](#1-o-que-é-este-kit)
-2. [Pré-requisitos](#2-pré-requisitos)
-3. [Secrets e variáveis de acesso](#3-secrets-e-variáveis-de-acesso)
-4. [Ambiente Linux / WSL](#4-ambiente-linux--wsl)
-5. [Ambiente Windows](#5-ambiente-windows)
-6. [Clonar o kit](#6-clonar-o-kit)
-7. [Projeto pré-existente (bootstrap)](#7-projeto-pré-existente-bootstrap)
-8. [Projeto novo](#8-projeto-novo)
-9. [Configurar o produto (`.glpi/`)](#9-configurar-o-produto-glpi)
-10. [Validar e ativar no GLPI](#10-validar-e-ativar-no-glpi)
-11. [Uso diário](#11-uso-diário)
-12. [Atualizar o kit no projeto](#12-atualizar-o-kit-no-projeto)
-13. [Perfis e numeração de docs](#13-perfis-e-numeração-de-docs)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Referências](#15-referências)
+2. [Presets e generalização](#2-presets-e-generalização)
+3. [Pré-requisitos](#3-pré-requisitos)
+4. [Secrets e variáveis de acesso](#4-secrets-e-variáveis-de-acesso)
+5. [Ambiente Linux / WSL](#5-ambiente-linux--wsl)
+6. [Ambiente Windows](#6-ambiente-windows)
+7. [Clonar o kit](#7-clonar-o-kit)
+8. [Assistentes de instalação](#8-assistentes-de-instalação)
+9. [Projeto pré-existente (bootstrap)](#9-projeto-pré-existente-bootstrap)
+10. [Projeto novo](#10-projeto-novo)
+11. [Configurar o produto (`.glpi/`)](#11-configurar-o-produto-glpi)
+12. [Validar e ativar no GLPI](#12-validar-e-ativar-no-glpi)
+13. [Uso diário](#13-uso-diário)
+14. [Atualizar o kit no projeto](#14-atualizar-o-kit-no-projeto)
+15. [Perfis e numeração de docs](#15-perfis-e-numeração-de-docs)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Referências](#17-referências)
+18. [Autoria e publicação](#autoria-e-publicação)
 
 ---
 
@@ -42,6 +62,8 @@ Repositório **fonte** (template) da Prefeitura de Franca / PMF para bootstrap d
 | `.github/skills/glpi-*` | Skills Cursor (follow-up, upsert, project-create, retro-scan) |
 | `docs/06_glpi/` | Documentação da integração |
 | `scripts/bootstrap-into.sh` | Aplica o kit em um clone de produto |
+| `scripts/install-glpi.sh` | Assistente bash (interativo + flags) |
+| `scripts/install_glpi.py` | Assistente Python (wizard + discover) |
 | `scripts/upgrade-into.sh` | Atualiza tools/skills/docs sem apagar a config do produto |
 
 Cada projeto **vendoriza** uma cópia local. Não execute o CLI de outro clone.
@@ -58,7 +80,7 @@ produto-X/                  produto-Y/
                     ▼
          ~/.secrets/GLPI-tokens.txt
                     ▼
-    suporte.franca.sp.gov.br (API GLPI)
+    <sua-instancia-glpi>/apirest.php
 ```
 
 | Camada | Itemtype | Papel |
@@ -69,7 +91,29 @@ produto-X/                  produto-Y/
 
 ---
 
-## 2. Pré-requisitos
+## 2. Presets e generalização
+
+| Preset | Uso |
+|--------|-----|
+| **`api-vscode-glpi`** (default) | Equipe PMF — URL/exemplo [suporte.franca](https://suporte.franca.sp.gov.br/apirest.php), estados GEP, secrets formato `pmf` |
+| **`generic`** | Qualquer GLPI — URL informada na instalação, template `generic-phases`, secrets formato `generic` |
+
+Config por produto:
+
+- `.glpi/instance.yaml` — URL, preset, `require_app_token`, formato secrets
+- `.glpi/project.yaml` — `ticket_id`, `project_id`, template de fases
+- `.glpi/maps/states.json` — aliases de estado (preferir **`glpi states discover --apply`**)
+
+Exemplo PMF em `project.yaml`:
+
+```yaml
+ticket_id: 10554   # Samu Operacional
+project_id: 72     # Desenvolvimento PMF SIGS-Samu
+```
+
+---
+
+## 3. Pré-requisitos
 
 | Ferramenta | Obrigatório | Notas |
 |------------|-------------|--------|
@@ -88,13 +132,13 @@ sudo apt update
 sudo apt install -y bash curl jq python3 rsync git
 ```
 
-Também é necessário: conta no GLPI com **user token** + **App-Token**, e IDs de Ticket/Project do produto (ou criá-los na UI/CLI).
+Também é necessário: conta no GLPI com **user token**; **App-Token** quando `require_app_token: true` (preset PMF); IDs de Ticket/Project ou criá-los na UI/CLI.
 
 ---
 
-## 3. Secrets e variáveis de acesso
+## 4. Secrets e variáveis de acesso
 
-### 3.1 Onde ficam
+### 4.1 Onde ficam
 
 | Ambiente | Caminho padrão |
 |----------|----------------|
@@ -104,12 +148,22 @@ Também é necessário: conta no GLPI com **user token** + **App-Token**, e IDs 
 
 A pasta `.secrets` fica na **raiz do home** (`~/.secrets`), **fora** de qualquer repositório.
 
-### 3.2 Formato `GLPI-tokens.txt`
+### 4.2 Formato `GLPI-tokens.txt`
+
+**Preset PMF (`format: pmf`):**
 
 ```text
 Pessoal API-GLPI: <SEU_USER_TOKEN>
 Grupo   API-GLPI: <SEU_APP_TOKEN>
 URL-API: https://suporte.franca.sp.gov.br/apirest.php
+```
+
+**Preset generic:**
+
+```text
+USER_TOKEN: <token>
+APP_TOKEN: <opcional>
+API_URL: https://seu-glpi/apirest.php
 ```
 
 | Label | Header HTTP | Papel |
@@ -120,7 +174,7 @@ URL-API: https://suporte.franca.sp.gov.br/apirest.php
 
 **Como obter:** Preferências do usuário no GLPI → token pessoal; App-Token com o administrador da API.
 
-### 3.3 Variáveis de ambiente (opcionais)
+### 4.3 Variáveis de ambiente (opcionais)
 
 | Variável | Default | Descrição |
 |----------|---------|-----------|
@@ -143,7 +197,7 @@ export GLPI_API_URL='https://suporte.franca.sp.gov.br/apirest.php'
 
 ---
 
-## 4. Ambiente Linux / WSL
+## 5. Ambiente Linux / WSL
 
 ```bash
 mkdir -p ~/.secrets
@@ -170,9 +224,9 @@ Convenção de pastas:
 
 ---
 
-## 5. Ambiente Windows
+## 6. Ambiente Windows
 
-**Recomendado:** WSL2 + Ubuntu — siga a [seção 4](#4-ambiente-linux--wsl) e abra o projeto no Cursor via Remote WSL.
+**Recomendado:** WSL2 + Ubuntu — siga a [seção 5](#5-ambiente-linux--wsl) e abra o projeto no Cursor via Remote WSL.
 
 **Nativo (Git Bash)** — só se não houver WSL:
 
@@ -188,7 +242,7 @@ export GLPI_SECRETS_FILE="/c/Users/<usuario>/.secrets/GLPI-tokens.txt"
 
 ---
 
-## 6. Clonar o kit
+## 7. Clonar o kit
 
 ```bash
 cd ~/projetos
@@ -199,7 +253,30 @@ chmod +x scripts/*.sh tools/glpi/glpi tools/glpi/bin/*
 
 ---
 
-## 7. Projeto pré-existente (bootstrap)
+---
+
+## 8. Assistentes de instalação
+
+| Script | Modo | Uso |
+|--------|------|-----|
+| `scripts/install-glpi.sh` | Interativo + flags | WSL/Linux — fluxo completo |
+| `scripts/install_glpi.py` | Wizard Python | Windows / discover isolado |
+
+Fluxo típico (equipe PMF):
+
+```bash
+./scripts/install-glpi.sh
+# ou
+./scripts/install-glpi.sh --target=~/projetos/meu-app --preset=api-vscode-glpi --non-interactive --yes
+```
+
+O assistente executa: bootstrap → `glpi auth` → **`glpi states discover --apply`** → seed dry-run → confirma `--apply`.
+
+Flags úteis: `--preset=generic`, `--glpi-url=...`, `--skip-seed`, `--secrets-format=generic`.
+
+---
+
+## 9. Projeto pré-existente (bootstrap)
 
 ```bash
 ./scripts/bootstrap-into.sh /caminho/absoluto/do/produto \
@@ -239,7 +316,7 @@ chmod +x produto/tools/glpi/glpi produto/tools/glpi/bin/*
 
 ---
 
-## 8. Projeto novo
+## 10. Projeto novo
 
 ```bash
 mkdir -p ~/projetos/meu-produto && cd ~/projetos/meu-produto
@@ -261,7 +338,7 @@ Atualize `.glpi/project.yaml` com os IDs. Plano local: `docs/05_progresso/geral/
 
 ---
 
-## 9. Configurar o produto (`.glpi/`)
+## 11. Configurar o produto (`.glpi/`)
 
 ```yaml
 # .glpi/project.yaml
@@ -283,7 +360,7 @@ followup_private: false
 
 ---
 
-## 10. Validar e ativar no GLPI
+## 12. Validar e ativar no GLPI
 
 Na **raiz do produto**:
 
@@ -293,8 +370,8 @@ Na **raiz do produto**:
 ./tools/glpi/glpi project get
 ./tools/glpi/glpi project tasks
 
+./tools/glpi/glpi states discover --apply
 ./tools/glpi/bin/glpi-seed-phases --template=corporate-phases
-./tools/glpi/bin/glpi-seed-phases --template=corporate-phases --apply
 
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
@@ -313,7 +390,7 @@ Na **raiz do produto**:
 
 ---
 
-## 11. Uso diário
+## 13. Uso diário
 
 | Ação | Como |
 |------|------|
@@ -329,7 +406,7 @@ Na **raiz do produto**:
 
 ---
 
-## 12. Atualizar o kit no projeto
+## 14. Atualizar o kit no projeto
 
 ```bash
 cd ~/projetos/pmf-dev-kit && git pull
@@ -338,7 +415,7 @@ cd ~/projetos/pmf-dev-kit && git pull
 
 ---
 
-## 13. Perfis e numeração de docs
+## 15. Perfis e numeração de docs
 
 | Perfil | Inclui |
 |--------|--------|
@@ -354,7 +431,7 @@ cd ~/projetos/pmf-dev-kit && git pull
 
 ---
 
-## 14. Troubleshooting
+## 16. Troubleshooting
 
 | Sintoma | Ação |
 |---------|------|
@@ -364,10 +441,11 @@ cd ~/projetos/pmf-dev-kit && git pull
 | `ticket_id nao informado` | Preencher `.glpi/project.yaml` |
 | `rsync: command not found` | Usar WSL ou cópia manual |
 | `project tasks` → `[]` | Seed + `state-project-*.json` |
+| `states discover` 403 | Sem permissão GET /ProjectState/ — usar mapa do preset |
 
 ---
 
-## 15. Referências
+## 17. Referências
 
 | Recurso | Path |
 |---------|------|
@@ -376,8 +454,28 @@ cd ~/projetos/pmf-dev-kit && git pull
 | Visão de gestão | [`docs/06_glpi/INTEGRACAO_GLPI_GESTAO_PROJETOS.md`](docs/06_glpi/INTEGRACAO_GLPI_GESTAO_PROJETOS.md) |
 | Hierarquia S/P | [`docs/06_glpi/HIERARQUIA_S_P_GLPI.md`](docs/06_glpi/HIERARQUIA_S_P_GLPI.md) |
 | CLI | [`tools/glpi/`](tools/glpi/) |
+| Assistentes | [`scripts/install-glpi.sh`](scripts/install-glpi.sh) · [`scripts/install_glpi.py`](scripts/install_glpi.py) |
 | Bootstrap / Upgrade | [`scripts/bootstrap-into.sh`](scripts/bootstrap-into.sh) · [`scripts/upgrade-into.sh`](scripts/upgrade-into.sh) |
+| Autoria e citação | [`AUTHORS.md`](AUTHORS.md) · [`CITATION.bib`](CITATION.bib) |
+| Licença | [`LICENSE`](LICENSE) (MIT) |
 
 ---
 
-*Origem: generalizado a partir de produtos PMF (ex.: samu-operacional). Secrets nunca neste repositório.*
+## Autoria e publicação
+
+| | |
+|---|---|
+| **Autor principal** | **Dr. Ricardo David** |
+| **E-mail pessoal** | [rdavid38@hotmail.com](mailto:rdavid38@hotmail.com) |
+| **E-mail corporativo** | [ricardodavid@franca.sp.gov.br](mailto:ricardodavid@franca.sp.gov.br) |
+| **Instituição patrocinadora** | Prefeitura Municipal de Franca (**PMF**) — **DTI** |
+| **Obra** | Concepção, arquitetura, implementação e documentação do **pmf-dev-kit** e do preset **API-VSCode-GLPI** |
+| **Origem** | Generalizado a partir de **samu-operacional** (SIGS-Samu); exemplos PMF na documentação |
+| **Licença** | [MIT](LICENSE) — uso, modificação e redistribuição com atribuição |
+| **Citação** | Ver [`AUTHORS.md`](AUTHORS.md) e [`CITATION.bib`](CITATION.bib) |
+
+> Publicação pública: inclua o aviso de copyright e a licença MIT ao redistribuir forks ou derivados.
+
+---
+
+*Secrets nunca neste repositório.*

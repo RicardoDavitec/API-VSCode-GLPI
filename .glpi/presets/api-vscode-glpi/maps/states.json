@@ -1,0 +1,35 @@
+{
+  "comment": "Preset api-vscode-glpi — mapa inicial PMF Franca. Preferir glpi states discover para atualizar da API.",
+  "preset": "api-vscode-glpi",
+  "updated_at": "2026-07-21",
+  "source": "seed-preset",
+  "aliases": {
+    "em_andamento": 2,
+    "finalizado": 3,
+    "aguardando_resposta": 6,
+    "backlog": 18,
+    "em_desenvolvimento": 20,
+    "gep1": 8,
+    "gep1_produto_backlog": 8,
+    "gep3": 10,
+    "gep3_fazendo": 10,
+    "gep4": 11,
+    "gep4_testando": 11,
+    "gep7": 13,
+    "gep7_feito": 13,
+    "gep9": 15,
+    "gep9_fechado": 15
+  },
+  "by_id": {
+    "2": "Em andamento",
+    "3": "Finalizado",
+    "6": "Aguardando Resposta",
+    "8": "GEP 1. Produto Backlog",
+    "10": "GEP 3. Fazendo",
+    "11": "GEP 4. Testando",
+    "13": "GEP 7. Feito",
+    "15": "GEP 9. Fechado",
+    "18": "Backlog",
+    "20": "Em desenvolvimento"
+  }
+}

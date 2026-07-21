@@ -5,6 +5,7 @@ set -euo pipefail
 KIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET=""
 PROFILE="pmf-core"
+PRESET="api-vscode-glpi"
 KEY=""
 TICKET=""
 PROJECT=""
@@ -16,6 +17,7 @@ Uso: $0 <dir-projeto> [opcoes]
 
 Opcoes:
   --profile=glpi-only|pmf-core|full-skeleton   (default: pmf-core)
+  --preset=api-vscode-glpi|generic             (default: api-vscode-glpi)
   --key=NOME                 chave em project.yaml
   --ticket=ID                ticket_id GLPI
   --project=ID               project_id GLPI
@@ -24,13 +26,36 @@ Opcoes:
 
 Exemplos:
   $0 /home/wsl/projetos/meu-app --profile=full-skeleton --key=meu-app
-  $0 ../outro-repo --profile=glpi-only --ticket=10554 --project=72
+  $0 ../outro-repo --profile=glpi-only --preset=api-vscode-glpi --ticket=10554 --project=72
 EOF
+}
+
+apply_preset() {
+  local preset="$1" target="$2"
+  local preset_dir="${KIT_ROOT}/.glpi/presets/${preset}"
+  [[ -d "$preset_dir" ]] || { echo "preset invalido: $preset" >&2; exit 1; }
+  mkdir -p "${target}/.glpi/presets" "${target}/.glpi/maps"
+  rsync -a "${preset_dir}/" "${target}/.glpi/presets/${preset}/"
+  if [[ -f "${preset_dir}/maps/states.json" ]]; then
+    cp "${preset_dir}/maps/states.json" "${target}/.glpi/maps/states.json"
+  fi
+  if [[ ! -f "${target}/.glpi/instance.yaml" ]]; then
+    if [[ -f "${preset_dir}/instance.yaml.example" ]]; then
+      cp "${preset_dir}/instance.yaml.example" "${target}/.glpi/instance.yaml"
+    else
+      sed "s/^preset:.*/preset: ${preset}/" \
+        "${KIT_ROOT}/.glpi/instance.yaml.example" >"${target}/.glpi/instance.yaml"
+    fi
+    echo "Criado .glpi/instance.yaml (preset=${preset})"
+  else
+    echo "Mantido .glpi/instance.yaml existente"
+  fi
 }
 
 for arg in "$@"; do
   case "$arg" in
     --profile=*) PROFILE="${arg#*=}" ;;
+    --preset=*) PRESET="${arg#*=}" ;;
     --key=*) KEY="${arg#*=}" ;;
     --ticket=*) TICKET="${arg#*=}" ;;
     --project=*) PROJECT="${arg#*=}" ;;
@@ -72,12 +97,18 @@ copy_tree() {
 echo "Kit:     $KIT_ROOT"
 echo "Alvo:    $TARGET"
 echo "Perfil:  $PROFILE"
+echo "Preset:  $PRESET"
 echo "Key:     $KEY"
 echo
 
 # Sempre: tools/glpi
 copy_tree "$KIT_ROOT/tools/glpi" "$TARGET/tools/glpi"
 chmod +x "$TARGET/tools/glpi/glpi" "$TARGET/tools/glpi/bin/"* 2>/dev/null || true
+
+# Presets + instance
+apply_preset "$PRESET" "$TARGET"
+mkdir -p "$TARGET/.glpi/presets"
+rsync -a "$KIT_ROOT/.glpi/presets/" "$TARGET/.glpi/presets/" 2>/dev/null || true
 
 # .glpi maps + templates (não sobrescreve project.yaml existente)
 mkdir -p "$TARGET/.glpi/maps" "$TARGET/.glpi/templates"
@@ -165,9 +196,11 @@ Bootstrap concluido.
 Proximos passos:
   1. Editar $TARGET/.glpi/project.yaml (ticket_id / project_id)
   2. cd $TARGET && ./tools/glpi/glpi auth
-  3. ./tools/glpi/bin/glpi-seed-phases --template=corporate-phases
-  4. ./tools/glpi/bin/glpi-retro-scan
-  5. Revisar JSON e ./tools/glpi/bin/glpi-retro-apply --from=... [--apply]
+  3. ./tools/glpi/glpi states discover --apply
+  4. ./tools/glpi/bin/glpi-seed-phases --template=corporate-phases
+  5. ./tools/glpi/bin/glpi-retro-scan
+
+Ou use o assistente: $KIT_ROOT/scripts/install-glpi.sh --target=$TARGET
 
 Docs GLPI: docs/06_glpi/
 Plano:     docs/05_progresso/geral/

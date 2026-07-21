@@ -146,6 +146,17 @@ Mapa entidades: VSCode (S→P) · Git (commit) · GLPI (pai→filho). Detalhe em
 
 Tudo sob `.glpi/` é **versionável** (sem secrets).
 
+### 3.0 `instance.yaml` — instância GLPI
+
+| Campo | Função |
+|-------|--------|
+| `preset` | `api-vscode-glpi` (default PMF) ou `generic` |
+| `glpi.api_url` | Base `/apirest.php` |
+| `glpi.require_app_token` | `true` na PMF; `false` em instâncias sem App-Token |
+| `secrets.format` | `pmf` ou `generic` |
+
+Criado pelo bootstrap ou assistente `install-glpi.sh`.
+
 ### 3.1 `project.yaml` — identidade deste repositório
 
 | Campo | Exemplo | Função |
@@ -394,6 +405,18 @@ Aplica o JSON do scan em ordem **pai → filho**. Dry-run por padrão.
 Skill: `.github/skills/glpi-retro-scan/SKILL.md`.  
 Wrappers: `tools/glpi/bin/`.  
 Hierarquia: `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`.
+
+#### `states discover [--apply]`
+
+Descobre `ProjectState` via API e gera `.glpi/maps/states.json`.
+
+```bash
+./tools/glpi/glpi states discover
+./tools/glpi/glpi states discover --apply
+./tools/glpi/glpi states discover --preset=api-vscode-glpi --apply
+```
+
+Prioridade na v1 da instalação (`install-glpi.sh`). Se a API retornar 403, use o mapa do preset.
 
 #### `seed-phases [project_id] [--apply] [--template=nome]`
 

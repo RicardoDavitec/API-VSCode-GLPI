@@ -1,0 +1,16 @@
+{
+  "comment": "Exemplo generico — substituir por saida de: glpi states discover --apply",
+  "preset": "generic",
+  "updated_at": "",
+  "source": "example",
+  "aliases": {
+    "new": 1,
+    "processing": 2,
+    "closed": 3
+  },
+  "by_id": {
+    "1": "New",
+    "2": "Processing",
+    "3": "Closed"
+  }
+}

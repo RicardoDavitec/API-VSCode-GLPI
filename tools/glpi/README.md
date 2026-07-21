@@ -1,55 +1,45 @@
-# CLI GLPI (MVP) — pmf-dev-kit
+# CLI GLPI — pmf-dev-kit
 
-Cópia **local** do CLI de gestão GLPI, distribuída pelo kit  
-[PMF-Integracao_GLPI/pmf-dev-kit](https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit).
+CLI **genérico** para API REST GLPI + preset **`api-vscode-glpi`** (exemplo PMF Franca).
 
-Cada produto PMF mantém sua própria cópia (não usar o CLI de outro clone).
+Integração passo a passo: `docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`  
+Assistentes: `scripts/install-glpi.sh` · `scripts/install_glpi.py`
 
-Hierarquia: **S = tarefa pai** · **P = subtarefa filho** → `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`  
-Integração passo a passo: `docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`
+## Comandos principais
+
+```bash
+./tools/glpi/glpi auth
+./tools/glpi/glpi states discover --apply    # v1: mapa de estados via API
+./tools/glpi/glpi ticket followup - "texto"
+./tools/glpi/glpi task upsert --code=S4.P1 --parent-code=S4 --apply
+./tools/glpi/glpi seed-phases --template=corporate-phases
+./tools/glpi/glpi retro-scan
+```
+
+## Presets
+
+| Preset | Descrição |
+|--------|-----------|
+| `api-vscode-glpi` (default) | VSCode ↔ Git ↔ GLPI — exemplo PMF |
+| `generic` | Qualquer instância GLPI |
+
+Config: `.glpi/instance.yaml` + `.glpi/project.yaml`
 
 ## Wrappers (`tools/glpi/bin/`)
 
-As skills **chamam estes scripts**:
+`glpi-followup` · `glpi-seed-phases` · `glpi-task-upsert` · `glpi-retro-scan` · `glpi-retro-apply` · `glpi-project-create`
 
-| Script | Função |
-|--------|--------|
-| `bin/glpi-project-create` | Cria Project |
-| `bin/glpi-seed-phases` | Seed de fases (pais) |
-| `bin/glpi-retro-scan` | Levantamento S/P (dedupe por code) |
-| `bin/glpi-retro-apply` | Aplica JSON pai→filho |
-| `bin/glpi-task-upsert` | Upsert uma task |
-| `bin/glpi-followup` | Follow-up no Ticket |
+## Secrets
 
-```bash
-./tools/glpi/bin/glpi-retro-scan
-./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
-./tools/glpi/bin/glpi-task-upsert --code=S4.P5 --parent-code=S4 --name="..." --apply
-```
+| Formato | Labels |
+|---------|--------|
+| `pmf` | Pessoal API-GLPI · Grupo API-GLPI · URL-API |
+| `generic` | USER_TOKEN · APP_TOKEN · API_URL |
 
-## Pré-requisitos
+Path: `~/.secrets/GLPI-tokens.txt` (override: `GLPI_SECRETS_FILE`)
 
-- `bash`, `curl`, `jq`, `python3`
-- `~/.secrets/GLPI-tokens.txt` (Pessoal=user_token, Grupo=App-Token, URL-API)
-- Ver manual de integração para WSL / Windows e variáveis `GLPI_*`
+## Estados
 
-## Config (no produto)
+`.glpi/maps/states.json` — gerado por `glpi states discover --apply` ou seed do preset.
 
-- `.glpi/project.yaml` — `ticket_id`, `project_id`, `phase_template`
-- `.glpi/templates/corporate-phases.json` — Discovery→Evolução
-- `.glpi/templates/product-s-phases.example.json` — exemplo S0–S7 (adaptar)
-- `.glpi/workspace.yaml` — polyrepo / retro-scan
-- `.glpi/maps/states.json` — aliases GEP
-
-## CLI completo
-
-```bash
-./tools/glpi/glpi --help
-./tools/glpi/glpi auth
-./tools/glpi/glpi seed-phases --template=corporate-phases
-./tools/glpi/glpi retro-scan
-./tools/glpi/glpi retro-apply --from=...json
-```
-
-Skills: `glpi-followup`, `glpi-task-upsert`, `glpi-project-create`, `glpi-retro-scan`  
-Docs: `docs/06_glpi/MANUAL_USO_GLPI.md`, `MANUAL_INTEGRACAO_GLPI.md`
+Exemplo PMF: aliases `gep1`, `gep3`, `gep7`…

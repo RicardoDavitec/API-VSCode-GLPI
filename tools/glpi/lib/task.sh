@@ -6,6 +6,8 @@ GLPI_STATES_FILE="${GLPI_STATES_FILE:-${REPO_ROOT}/.glpi/maps/states.json}"
 
 resolve_state_id() {
   # resolve_state_id <alias|id|trecho-do-nome>
+  load_project_config
+  GLPI_STATES_FILE="${GLPI_STATES_FILE:-${REPO_ROOT}/.glpi/maps/states.json}"
   local raw="${1:-}"
   [[ -n "$raw" ]] || return 1
 

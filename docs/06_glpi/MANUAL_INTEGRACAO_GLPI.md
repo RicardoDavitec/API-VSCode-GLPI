@@ -7,28 +7,33 @@
 |---|---|
 | **Repositório** | [PMF-Integracao_GLPI/pmf-dev-kit](https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit) |
 | **Clone** | `https://gitness.franca.sp.gov.br/git/PMF-Integracao_GLPI/pmf-dev-kit.git` |
-| **API GLPI** | `https://suporte.franca.sp.gov.br/apirest.php` |
+| **API GLPI (exemplo PMF)** | `https://suporte.franca.sp.gov.br/apirest.php` |
+| **Preset default** | `api-vscode-glpi` |
 | **Última atualização** | 21/07/2026 |
+
+> **Generalização:** o kit funciona com **qualquer instância GLPI** (API REST). O preset `api-vscode-glpi` documenta o fluxo VSCode ↔ Git ↔ GLPI com **exemplos PMF Franca** para a equipe interna. Use `--preset=generic` para outras instâncias.
 
 ---
 
 ## Sumário
 
 1. [O que é este kit](#1-o-que-é-este-kit)
-2. [Pré-requisitos](#2-pré-requisitos)
-3. [Secrets e variáveis de acesso](#3-secrets-e-variáveis-de-acesso)
-4. [Ambiente Linux / WSL](#4-ambiente-linux--wsl)
-5. [Ambiente Windows](#5-ambiente-windows)
-6. [Clonar o kit](#6-clonar-o-kit)
-7. [Projeto pré-existente (bootstrap)](#7-projeto-pré-existente-bootstrap)
-8. [Projeto novo](#8-projeto-novo)
-9. [Configurar o produto (`.glpi/`)](#9-configurar-o-produto-glpi)
-10. [Validar e ativar no GLPI](#10-validar-e-ativar-no-glpi)
-11. [Uso diário](#11-uso-diário)
-12. [Atualizar o kit no projeto (`upgrade`)](#12-atualizar-o-kit-no-projeto-upgrade)
-13. [Perfis de bootstrap](#13-perfis-de-bootstrap)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Referências](#15-referências)
+2. [Presets (`api-vscode-glpi` / `generic`)](#2-presets-api-vscode-glpi--generic)
+3. [Pré-requisitos](#3-pré-requisitos)
+4. [Secrets e variáveis de acesso](#4-secrets-e-variáveis-de-acesso)
+5. [Ambiente Linux / WSL](#5-ambiente-linux--wsl)
+6. [Ambiente Windows](#6-ambiente-windows)
+7. [Clonar o kit](#7-clonar-o-kit)
+8. [Assistentes de instalação](#8-assistentes-de-instalação)
+9. [Projeto pré-existente (bootstrap)](#9-projeto-pré-existente-bootstrap)
+10. [Projeto novo](#10-projeto-novo)
+11. [Configurar o produto (`.glpi/`)](#11-configurar-o-produto-glpi)
+12. [Validar e ativar no GLPI](#12-validar-e-ativar-no-glpi)
+13. [Uso diário](#13-uso-diário)
+14. [Atualizar o kit no projeto (`upgrade`)](#14-atualizar-o-kit-no-projeto-upgrade)
+15. [Perfis de bootstrap](#15-perfis-de-bootstrap)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Referências](#17-referências)
 
 ---
 
@@ -43,6 +48,8 @@ O **pmf-dev-kit** é o repositório **fonte** (template) da Prefeitura de Franca
 | `.github/skills/glpi-*` | Skills Cursor (follow-up, upsert, project-create, retro-scan) |
 | `docs/06_glpi/` | Documentação da integração |
 | `scripts/bootstrap-into.sh` | Aplica o kit em um clone de produto |
+| `scripts/install-glpi.sh` | Assistente bash (interativo + flags) |
+| `scripts/install_glpi.py` | Assistente Python (wizard + discover) |
 | `scripts/upgrade-into.sh` | Atualiza tools/skills/docs sem apagar a config do produto |
 
 **Modelo de distribuição:** cada projeto **vendoriza** (copia) o CLI, skills e docs. Não se executa o CLI “de outro repositório”. Secrets ficam **fora do git**, na máquina do desenvolvedor.
@@ -76,9 +83,28 @@ Uso operacional do CLI: [`MANUAL_USO_GLPI.md`](MANUAL_USO_GLPI.md).
 
 ---
 
-## 2. Pré-requisitos
+## 2. Presets (`api-vscode-glpi` / `generic`)
 
-### 2.1 Software
+| Preset | Público | URL exemplo | Secrets | Estados |
+|--------|---------|-------------|---------|---------|
+| **`api-vscode-glpi`** | Equipe PMF | `https://suporte.franca.sp.gov.br/apirest.php` | formato `pmf` | GEP + `states discover` |
+| **`generic`** | Qualquer GLPI | informada na instalação | formato `generic` | `states discover` ou exemplo |
+
+Arquivos em `.glpi/presets/<preset>/`. O bootstrap grava `.glpi/instance.yaml` com o preset escolhido.
+
+**Exemplo PMF** (`project.yaml`):
+
+```yaml
+ticket_id: 10554   # Samu Operacional
+project_id: 72     # SIGS-Samu
+entity_hint: "Prefeitura de Franca"
+```
+
+---
+
+## 3. Pré-requisitos
+
+### 3.1 Software
 
 | Ferramenta | Obrigatório | Notas |
 |------------|-------------|--------|
@@ -90,13 +116,13 @@ Uso operacional do CLI: [`MANUAL_USO_GLPI.md`](MANUAL_USO_GLPI.md).
 | `git` | Sim | Clone / fluxo de trabalho |
 | Cursor (ou VS Code + Agent) | Recomendado | Skills em `.github/skills/` |
 
-### 2.2 Acesso GLPI
+### 3.2 Acesso GLPI
 
-1. Conta no [suporte.franca.sp.gov.br](https://suporte.franca.sp.gov.br) com permissão de API.
-2. **User token** (pessoal) e **App-Token** (grupo/cliente API) — obrigatórios nesta instância.
-3. IDs do **Ticket** e/ou **Project** do produto (criar na UI se ainda não existirem), ou usar `project create` do CLI (dry-run → `--apply`).
+1. Conta no GLPI com permissão de API (exemplo PMF: [suporte.franca.sp.gov.br](https://suporte.franca.sp.gov.br/front/login.php)).
+2. **User token** (pessoal); **App-Token** quando `require_app_token: true` (preset PMF).
+3. IDs do **Ticket** e/ou **Project** — criar na UI ou via `project create`.
 
-### 2.3 Instalação rápida das dependências
+### 3.3 Instalação rápida das dependências
 
 **Debian/Ubuntu (WSL incluso):**
 
@@ -109,7 +135,7 @@ sudo apt install -y bash curl jq python3 rsync git
 
 ---
 
-## 3. Secrets e variáveis de acesso
+## 4. Secrets e variáveis de acesso
 
 ### 3.1 Onde ficam os secrets
 
@@ -276,7 +302,45 @@ O kit em si **não** substitui o `project.yaml` de um produto; ele é a fonte pa
 
 ---
 
-## 7. Projeto pré-existente (bootstrap)
+## 8. Assistentes de instalação
+
+### 8.1 Bash — `scripts/install-glpi.sh`
+
+```bash
+# Interativo (equipe PMF)
+./scripts/install-glpi.sh
+
+# Automação
+./scripts/install-glpi.sh \
+  --target=~/projetos/meu-app \
+  --preset=api-vscode-glpi \
+  --ticket=10554 --project=72 \
+  --non-interactive --yes
+```
+
+Flags: `--preset`, `--profile`, `--glpi-url`, `--secrets-file`, `--secrets-format`, `--skip-bootstrap`, `--skip-discover`, `--skip-seed`.
+
+### 8.2 Python — `scripts/install_glpi.py`
+
+```bash
+python3 scripts/install_glpi.py
+python3 scripts/install_glpi.py --non-interactive --target=~/projetos/app --preset=generic --yes
+python3 scripts/install_glpi.py --discover-only --target=~/projetos/app --yes
+```
+
+### 8.3 Descoberta de estados (prioridade v1)
+
+```bash
+cd /caminho/do/produto
+./tools/glpi/glpi states discover          # dry-run
+./tools/glpi/glpi states discover --apply  # grava .glpi/maps/states.json
+```
+
+Consulta `GET /ProjectState/` na API. Se retornar 403 (sem permissão), mantém o mapa do preset `api-vscode-glpi`.
+
+---
+
+## 9. Projeto pré-existente (bootstrap)
 
 Use quando o repositório do produto **já existe** (código, histórico git) e você quer adicionar a integração GLPI.
 
@@ -561,7 +625,17 @@ Numeração de pastas: [`../00_visao_geral/NUMERACAO_DOCS.md`](../00_visao_geral
 | Bootstrap | `scripts/bootstrap-into.sh` |
 | Upgrade | `scripts/upgrade-into.sh` |
 | Gitness | https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit |
+| Autoria | [`AUTHORS.md`](../../AUTHORS.md) · [`LICENSE`](../../LICENSE) |
 
 ---
 
-*Kit fonte PMF — Integração GLPI. Secrets nunca neste repositório.*
+## Autoria
+
+**Dr. Ricardo David** — autor principal do kit, CLI GLPI, assistentes de instalação e documentação.  
+**Instituição patrocinadora:** PMF — DTI.  
+E-mails: [rdavid38@hotmail.com](mailto:rdavid38@hotmail.com) (pessoal) · [ricardodavid@franca.sp.gov.br](mailto:ricardodavid@franca.sp.gov.br) (corporativo).  
+Detalhes, citação e licença MIT: [`AUTHORS.md`](../../AUTHORS.md) · [`LICENSE`](../../LICENSE).
+
+---
+
+*Kit fonte — Integração GLPI. Secrets nunca neste repositório.*
