@@ -386,10 +386,15 @@ Skill: `.github/skills/glpi-project-create/SKILL.md`.
 
 #### `retro-scan` (P1)
 
-Lê `.glpi/workspace.yaml`, varre planos/checklists e gera candidatos **S (pai)** / **P (filho)** (dedupe por `code`) em `docs/06_glpi/retro-scans/`.
+Lê `.glpi/workspace.yaml`, varre planos/checklists/**commits** e gera candidatos **S (pai)** / **P (filho)** em `docs/06_glpi/retro-scans/`.
+
+**Timestamps (v2):** commits no mesmo dia encadeiam `real_start`←commit anterior e `real_end`←commit atual; o 1º do dia usa estimativa (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60). Datas do plano têm prioridade; commits preenchem `null`.
+
+**Status/GEP:** `[x]`→`gep7`, `[~]`→`gep3`, `[ ]`→`gep1`; evidência só de commit → `gep7` (retro).
 
 ```bash
 ./tools/glpi/bin/glpi-retro-scan
+./tools/glpi/glpi retro-scan --workspace=.glpi/workspace.yaml
 ```
 
 #### `retro-apply --from=JSON` (P1)

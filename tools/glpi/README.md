@@ -5,15 +5,19 @@ CLI **genérico** para API REST GLPI + preset **`api-vscode-glpi`** (exemplo PMF
 Integração passo a passo: `docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`  
 Assistentes: `scripts/install-glpi.sh` · `scripts/install_glpi.py`
 
-## Comandos principais
+## Retro-scan (timestamps e GEP)
+
+O `retro-scan` preenche datas a partir de **commits**:
+
+- mesmo dia: `real_start` = commit anterior, `real_end` = commit atual (`temporal_source: commit-chain`)
+- 1º commit do dia: estima duração (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60) e subtrai (`temporal_source: estimated`)
+- plano/checklist com datas preenchidas têm prioridade; commits preenchem campos `null`
+- status: `[x]`/`done` → `gep7`; `[~]` → `gep3`; `[ ]` → `gep1`; só commit → `gep7` (retro)
 
 ```bash
-./tools/glpi/glpi auth
-./tools/glpi/glpi states discover --apply    # v1: mapa de estados via API
-./tools/glpi/glpi ticket followup - "texto"
-./tools/glpi/glpi task upsert --code=S4.P1 --parent-code=S4 --apply
-./tools/glpi/glpi seed-phases --template=corporate-phases
 ./tools/glpi/glpi retro-scan
+# dry-run do apply (não grava GLPI):
+./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
 ```
 
 ## Presets
