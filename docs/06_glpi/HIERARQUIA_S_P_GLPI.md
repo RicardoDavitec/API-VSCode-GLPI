@@ -1,7 +1,9 @@
-# Hierarquia plano ↔ GLPI (SAMU)
+# Hierarquia plano ↔ GLPI (S / P)
 
-> Refatoração: **S** = tarefa pai · **P** = subtarefa filho.  
-> Data: 20/07/2026.
+> Convenção do **pmf-dev-kit**: **S** = tarefa pai · **P** = subtarefa filho.  
+> Data: 21/07/2026.
+
+Exemplos de código (`S4`, Project 72) vêm do produto histórico SIGS-Samu; adapte ao `project_id` e ao plano do seu produto.
 
 ---
 
@@ -17,7 +19,7 @@
 
 | Plano local | Código | GLPI `ProjectTask` | Campo vínculo |
 |-------------|--------|--------------------|---------------|
-| Fase / semana | `S0` … `S7` (ex.: `S4`) | Tarefa **pai** | `projects_id` = Project 72 |
+| Fase / semana | `S0` … `Sn` (ex.: `S4`) | Tarefa **pai** | `projects_id` = Project do `project.yaml` |
 | Item da fase | `S4.P1`, `S4.P2`… | Tarefa **filho** (subtarefa) | `projecttasks_id` = id do pai `S4` |
 
 Campos temporais e progresso no `PLANO_IMPLEMENTACAO.md` (por fase e por item):
@@ -31,15 +33,15 @@ Campos temporais e progresso no `PLANO_IMPLEMENTACAO.md` (por fase e por item):
 | `Critério` | trecho de `content` |
 
 ```text
-Project 72
-├── [pai]  S0  Scaffold e infra
-│     ├── [filho] S0.P1  Monorepo npm workspaces
-│     └── [filho] S0.P2  Docker compose …
-├── [pai]  S1  MVP TARM + Monitor
+Project <project_id>
+├── [pai]  S0  …
+│     ├── [filho] S0.P1  …
+│     └── [filho] S0.P2  …
+├── [pai]  S1  …
 │     └── …
-└── [pai]  S4  Unidade móvel + GPS MVP
-      ├── [filho] S4.P1  App mobile autenticação …
-      └── [filho] S4.P5  Fila offline sync
+└── [pai]  S4  …
+      ├── [filho] S4.P1  …
+      └── [filho] S4.P5  …
 ```
 
 ### Fluxo da informação
@@ -66,11 +68,11 @@ PLANO_IMPLEMENTACAO.md
 | `glpi-retro-scan` | Gera candidatos **S (pai)** e **P (filho)** a partir do markdown |
 | `glpi-task-upsert` | Cria/atualiza pai (`--code=S4`) ou filho (`--code=S4.P1 --parent-code=S4`) |
 | `glpi-followup` | Evidência no **Ticket** (não substitui subtarefa) |
-| `seed-phases` | Template legado Discovery→Evolução **ou** `samu-s-phases` (pais S0–S7) |
+| `seed-phases` | Template `corporate-phases` **ou** fases S (exemplo `product-s-phases.example.json`) |
 
 ### Convenção de códigos
 
-- Pai: `S{n}` — `S0`, `S1`, … `S7`
+- Pai: `S{n}` — `S0`, `S1`, … `Sn`
 - Filho: `S{n}.P{m}` — `S4.P1`, `S4.P2` (ordem da tabela no plano)
 - Sub-item explícito no texto (`S1.5`) pode virar filho `S1.P…` ou código documentado no state
 
@@ -78,13 +80,13 @@ PLANO_IMPLEMENTACAO.md
 
 ## Estado local
 
-Arquivo `.glpi/state-project-72.json`:
+Arquivo `.glpi/state-project-<id>.json`:
 
 ```json
 {
   "tasks": [
-    { "id": 900, "code": "S4", "name": "S4 — Unidade móvel", "kind": "phase" },
-    { "id": 901, "code": "S4.P5", "name": "Fila offline sync", "kind": "item", "parent_code": "S4", "parent_id": 900 }
+    { "id": 900, "code": "S4", "name": "S4 — …", "kind": "phase" },
+    { "id": 901, "code": "S4.P5", "name": "…", "kind": "item", "parent_code": "S4", "parent_id": 900 }
   ]
 }
 ```
@@ -95,11 +97,11 @@ Arquivo `.glpi/state-project-72.json`:
 
 ```bash
 # Wrappers diretos (preferidos; skills os chamam)
-./tools/glpi/bin/glpi-seed-phases --template=samu-s-phases
+./tools/glpi/bin/glpi-seed-phases --template=corporate-phases
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
-./tools/glpi/bin/glpi-task-upsert --code=S4 --name="S4 — Unidade móvel" --state=gep3 --percent=60
-./tools/glpi/bin/glpi-task-upsert --code=S4.P5 --parent-code=S4 --name="Fila offline sync" --state=gep1 --percent=0 --apply
+./tools/glpi/bin/glpi-task-upsert --code=S4 --name="S4 — …" --state=gep3 --percent=60
+./tools/glpi/bin/glpi-task-upsert --code=S4.P5 --parent-code=S4 --name="…" --state=gep1 --percent=0 --apply
 ```
 
 ### Fluxo lote (após revisão do relatório)
@@ -112,5 +114,7 @@ Arquivo `.glpi/state-project-72.json`:
 
 ## Nota sobre template `corporate-phases`
 
-Discovery → Evolução permanece como template **corporativo opcional** (fases de gestão PMF).  
-A hierarquia operacional SAMU do plano é **S/P** (`samu-s-phases` + itens do `PLANO_IMPLEMENTACAO.md`).
+Discovery → Evolução permanece como template **corporativo padrão** do kit (fases de gestão PMF).  
+A hierarquia operacional por plano é **S/P** (adaptar o exemplo `product-s-phases.example.json` + itens do `PLANO_IMPLEMENTACAO.md`).
+
+Integração completa: [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md).

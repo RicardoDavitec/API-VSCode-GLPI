@@ -1,8 +1,9 @@
 # Reavaliação — Integração VSCode / Git / GLPI
 
 > Base: `Integração SKILLs IA entre Projeto - GLPI.txt` (estrutura de campos GLPI + relação de entidades).  
-> Cruza com o MVP implementado (`tools/glpi`, `glpi-followup`, `.glpi/*`).  
-> Data: 20/07/2026.
+> Cruza com o MVP do **pmf-dev-kit** (`tools/glpi`, skills `glpi-*`, bootstrap/upgrade).  
+> Data: 21/07/2026.  
+> Manual atual: [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md).
 
 ---
 
@@ -51,26 +52,29 @@
 ## 2. O que existe hoje (MVP)
 
 ```text
+pmf-dev-kit ──bootstrap──► produto (tools/glpi + skills + docs/06_glpi)
 VSCode/Cursor ──skills──► git commit/push (exporte)
        │
-       └──glpi-followup──► Ticket 10554 (ITILFollowup)
-                              ▲
-CLI seed-phases ──► Project 72 + ProjectTasks 800–805 (só nome/%/content)
+       ├──glpi-followup──► Ticket (ITILFollowup)
+       ├──glpi-task-upsert / retro-apply──► ProjectTask (S/P, GEP, %)
+       └──glpi-project-create──► Project
+CLI seed-phases ──► ProjectTasks a partir de templates
 ```
 
 | Capacidade | Status |
 |------------|--------|
 | Auth API + ticket get/followup | Feito |
-| Project get + list tasks | Feito (parcial) |
-| Seed fases genéricas Discovery→Evolução | Feito |
-| Criar Project completo (código, prioridade, estado GEP, gerente, datas) | **Não** |
-| Criar/atualizar ProjectTask com estado GEP, datas, marco, equipe, pai | **Não** |
-| Retro-scan markdown → tasks | Config `workspace.yaml` só; scanner **não** |
+| Project get + list tasks | Feito (parcial nesta instância) |
+| Seed fases Discovery→Evolução / S0–Sn | Feito |
+| Criar Project (código, prioridade, estado GEP) | Feito (`project create`, dry-run→`--apply`) |
+| Criar/atualizar ProjectTask (GEP, %, datas, pai) | Feito (`task upsert`) |
+| Retro-scan markdown → tasks | Feito (`retro-scan` + `retro-apply`) |
+| Bootstrap / upgrade em produtos | Feito (`scripts/*-into.sh`) |
 | Sync automático no push/CI | **Não** |
-| Planos markdown com campos GLPI | **Não** (plano usa `[ ]/[x]` S0–S7) |
+| Planos markdown com todos os campos GLPI | Parcial (convenção S/P + checklist) |
 | Ticket como diário institucional | Feito (`glpi-followup`) |
 
-**Gap principal:** o MVP privilegia o **Ticket (auditoria)**; o documento privilegia o **Project + ProjectTask (gestão de entrega)** com ciclo de vida GEP.
+**Gap residual:** sync automático CI pós-deploy; dry-run no followup; completar aliases GEP 2/5/6/8 no mapa de estados.
 
 ---
 

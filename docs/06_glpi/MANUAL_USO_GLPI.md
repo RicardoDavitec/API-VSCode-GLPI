@@ -1,11 +1,14 @@
-# Manual de uso — Integração GLPI (SAMU Operacional)
+# Manual de uso — Integração GLPI (CLI e operação)
 
-> Guia operacional completo do CLI, configs, secrets, skills e conceitos GLPI.  
+> Guia operacional do CLI, configs, secrets, skills e conceitos GLPI.  
+> **Integração passo a passo (bootstrap, WSL/Windows):** [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md)  
 > Complementa: [`INTEGRACAO_GLPI_GESTAO_PROJETOS.md`](INTEGRACAO_GLPI_GESTAO_PROJETOS.md) (visão) e [`GLPI-rest-API-documentationmd`](GLPI-rest-API-documentationmd) (API raw).
 
-**Última atualização:** 20/07/2026  
-**Branch típica de trabalho:** `teste-sigs-samu-operacional`  
-**Escopo:** gestão de projeto / auditoria institucional — **não** faz parte do domínio regulatório SAMU 195 (`apps/backend`).
+**Fonte:** [pmf-dev-kit](https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit)  
+**Última atualização:** 21/07/2026  
+**Escopo:** gestão de projeto / auditoria institucional — **fora** do domínio de negócio da aplicação do produto.
+
+Os IDs Ticket/Project abaixo usam o exemplo histórico **SIGS-Samu** (10554 / 72). Em cada produto, use os valores de `.glpi/project.yaml`.
 
 ---
 
@@ -21,7 +24,7 @@
 8. [Fluxos do dia a dia](#8-fluxos-do-dia-a-dia)
 9. [Testes sem comprometer o GLPI](#9-testes-sem-comprometer-o-glpi)
 10. [Troubleshooting](#10-troubleshooting)
-11. [Inventário SAMU (IDs)](#11-inventário-samu-ids)
+11. [Inventário de exemplo (IDs)](#11-inventário-de-exemplo-ids)
 12. [Roadmap](#12-roadmap)
 
 ---
@@ -32,6 +35,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  Desenvolvimento local (git, plano, CI)                         │
 │  PLANO_IMPLEMENTACAO.md · commits · exporte/importe             │
+│  (artefatos vendorizados a partir do pmf-dev-kit)               │
 └────────────────────────────┬────────────────────────────────────┘
                              │
               ┌──────────────┼──────────────┐
@@ -54,19 +58,20 @@
 
 ### Ciclo típico de entrega
 
-1. Trabalhar no item do plano (ex.: S4, S1.1).
+1. Trabalhar no item do plano (ex.: S4, S1.P1).
 2. Validar localmente (build/health).
 3. Commit + push (`commit` / `exporte`).
-4. Registrar evidência no chamado: `glpi-followup` → `ITILFollowup` no Ticket **10554**.
-5. (Opcional) Atualizar % / status da `ProjectTask` da fase correspondente (manual no GLPI UI ou futuro CLI).
-6. Marcar checkbox *follow-up GLPI enviado?* no checklist de commit.
+4. Registrar evidência no chamado: `glpi-followup` → `ITILFollowup` no Ticket do `project.yaml`.
+5. (Opcional) Atualizar % / status da `ProjectTask` (`glpi-task-upsert` ou UI).
+6. Marcar checkbox *follow-up GLPI enviado?* no checklist de commit (quando existir).
 
 ### Separação de responsabilidades
 
 | Camada | Onde | O quê |
 |--------|------|--------|
-| Produto SAMU 195 | `apps/*` | Chamadas, regulação, GPS… |
+| Produto (domínio) | `apps/*`, código do negócio | Funcionalidade do sistema |
 | Gestão / auditoria | `tools/glpi`, `.glpi/`, skills | Ticket + Project no suporte.franca |
+| Kit fonte | `pmf-dev-kit` | Bootstrap / upgrade das ferramentas |
 | Secrets | `~/.secrets/` (máquina) | Tokens — **nunca** no git |
 
 ---
@@ -78,14 +83,14 @@ No GLPI da Prefeitura, três conceitos se complementam (não são a mesma coisa)
 ### 2.1 Projeto (`Project`) — container de entrega
 
 - **O que é:** objeto de gestão de projeto (escopo, % global, datas).
-- **Neste repo:** ID **72** — *Desenvolvimento PMF SIGS-Samu*.
+- **Config:** `project_id` em `.glpi/project.yaml` (ex. histórico Samu: **72**).
 - **Para que serve:** agrupar fases/tarefas de implementação; visão gerencial do produto.
 - **API:** `GET/POST /Project/`, `GET /Project/:id`.
 
 ### 2.2 Chamado / Ticket (`Ticket`) — canal institucional
 
 - **O que é:** chamado de suporte/atendimento (ITIL), com requerente, técnico, status, timeline.
-- **Neste repo:** ID **10554** — *Samu Operacional*.
+- **Config:** `ticket_id` em `.glpi/project.yaml` (ex. histórico Samu: **10554**).
 - **Para que serve:** auditoria oficial perante a DTI/suporte; histórico legível por gestores; follow-ups.
 - **API:** `GET /Ticket/:id`, follow-ups via `POST /ITILFollowup/`.
 
@@ -94,11 +99,10 @@ Relação prática: o **Ticket** é o “processo administrativo”; o **Project
 ### 2.3 Tarefas de projeto (`ProjectTask`) — fases (S) / itens (P)
 
 - **O que é:** tarefa **dentro de um Project** (nome, %, conteúdo, datas, pai).
-- **Hierarquia operacional SAMU:**
+- **Hierarquia operacional (padrão kit):**
   - **S** (fase/semana) = tarefa **pai** (`code=S4`)
   - **P** (item) = **subtarefa** (`code=S4.P1`, `projecttasks_id` = id do pai)
-- **Template padrão:** `samu-s-phases` (pais S0–S7). Ver `HIERARQUIA_S_P_GLPI.md`.
-- **Legado PMF neste repo:** IDs **800–805** (Discovery → Evolução / `corporate-phases`).
+- **Templates:** `corporate-phases` (Discovery→Evolução) ou fases S0–Sn (exemplo em `product-s-phases.example.json`). Ver `HIERARQUIA_S_P_GLPI.md`.
 - **API:** `POST /ProjectTask/`, `GET /ProjectTask/:id` (campo `projecttasks_id` = pai).
 
 > Não confundir com **TicketTask** (tarefa *do chamado*). O MVP atual trabalha com **ProjectTask** + **ITILFollowup** no Ticket.
@@ -122,8 +126,8 @@ PLANO_IMPLEMENTACAO (repo)
         ▼
    glpi-task-upsert ──► atualiza pai e/ou filho
         │
-Ticket 10554 ←── ITILFollowup (canal oficial)
-Project 72   ←── container das ProjectTasks
+Ticket (ticket_id) ←── ITILFollowup (canal oficial)
+Project (project_id) ←── container das ProjectTasks
 ```
 
 Mapa entidades: VSCode (S→P) · Git (commit) · GLPI (pai→filho). Detalhe em `HIERARQUIA_S_P_GLPI.md`.
@@ -131,10 +135,10 @@ Mapa entidades: VSCode (S→P) · Git (commit) · GLPI (pai→filho). Detalhe em
 ### 2.6 Mapa evento → GLPI
 | Evento local | Onde aparece no GLPI |
 |--------------|----------------------|
-| Seed de fases | Novas `ProjectTask` no Project 72 |
-| Checkpoint / entrega | `ITILFollowup` no Ticket 10554 |
-| Avanço de fase (manual/futuro) | `percent_done` / estado da `ProjectTask` |
-| Encerramento macro | Status do Ticket / % do Project (UI ou API futura) |
+| Seed de fases | Novas `ProjectTask` no Project configurado |
+| Checkpoint / entrega | `ITILFollowup` no Ticket configurado |
+| Avanço de fase | `percent_done` / estado da `ProjectTask` (`task upsert`) |
+| Encerramento macro | Status do Ticket / % do Project (UI ou API) |
 
 ---
 
@@ -146,7 +150,7 @@ Tudo sob `.glpi/` é **versionável** (sem secrets).
 
 | Campo | Exemplo | Função |
 |-------|---------|--------|
-| `key` | `samu-operacional` | Identificador lógico do produto |
+| `key` | `meu-produto` | Identificador lógico do produto |
 | `ticket_id` | `10554` | Ticket padrão do CLI (`ticket get` / `followup`) |
 | `project_id` | `72` | Project padrão (`project get` / `tasks` / `seed-phases`) |
 | `phase_template` | `corporate-phases` | Nome do template em `templates/` |
@@ -160,7 +164,7 @@ Sobrescreva IDs na linha de comando quando necessário:
 
 **O que é:** receita das fases Discovery → Evolução para **criar** `ProjectTask`s.
 
-**Para que serve:** padronizar fases de gestão em qualquer produto PMF, mapeando para o plano SAMU (`samu_map`: S0–S7 / apps).
+**Para que serve:** padronizar fases de gestão em qualquer produto PMF (campo opcional `samu_map` / mapa S0–Sn no plano).
 
 | Campo da fase | Função |
 |---------------|--------|
@@ -176,13 +180,13 @@ Sobrescreva IDs na linha de comando quando necessário:
 
 ### 3.3 `workspace.yaml` — bundle multi-repositório
 
-**O que é:** lista de clones que compõem o programa SAMU (polyrepo).
+**O que é:** lista de clones que compõem o programa/produto (polyrepo).
 
 **Para que serve:** bundle polyrepo para `glpi-retro-scan` (planos/commits/branches → candidatos a ProjectTask).
 
 | Campo | Função |
 |-------|--------|
-| `bundle` | Nome do pacote (`samu`) |
+| `bundle` | Nome do pacote (ex.: `meu-produto`) |
 | `glpi.ticket_id` / `project_id` | Contexto GLPI do bundle |
 | `repos[].path` | Caminho absoluto do clone |
 | `repos[].role` | `primary` / `module` / … |
@@ -215,7 +219,9 @@ Atualizado automaticamente após `seed-phases --apply`. Pode ser commitado (não
 
 ### 4.1 Arquivo padrão
 
-`~/.secrets/GLPI-tokens.txt` (fora do git)
+`~/.secrets/GLPI-tokens.txt` — pasta `.secrets` na **raiz do home** (Linux/WSL: `/home/<user>/.secrets/`; Windows: `%USERPROFILE%\.secrets\`). Fora do git.
+
+Setup completo (WSL/Windows): [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md) §§3–5.
 
 Formato esperado (linhas livres parseadas pelo CLI):
 
@@ -395,8 +401,8 @@ Cria **tarefas pai** a partir do template JSON.
 
 | Template | Uso |
 |----------|-----|
-| `samu-s-phases` (padrão) | Pais S0–S7 do plano SAMU |
-| `corporate-phases` | Legado Discovery→Evolução (800–805) |
+| `corporate-phases` (default no example) | Pais Discovery→Evolução |
+| `samu-s-phases` / fases S (via exemplo `product-s-phases.example.json`) | Pais S0–S7 do plano |
 
 | Modo | Comportamento |
 |------|----------------|
@@ -440,7 +446,7 @@ Skill: `.github/skills/glpi-followup/SKILL.md`
 
 ### Integração com o checklist de commit
 
-Arquivo: `docs/05-gestao-projeto/geral/FLUXO_COMMIT_CHECKLIST.md`
+Arquivo: `docs/05_progresso/geral/FLUXO_COMMIT_CHECKLIST.md` (quando o perfil bootstrap incluir progresso).
 
 Item: **- [ ] follow-up GLPI enviado?**
 
@@ -519,7 +525,9 @@ Logs úteis: resposta JSON completa do `curl` (o CLI já imprime via `jq`).
 
 ---
 
-## 11. Inventário SAMU (IDs)
+## 11. Inventário de exemplo (IDs)
+
+Exemplo histórico **SIGS-Samu** (não são defaults do kit; cada produto configura os seus):
 
 | Tipo | ID | Nome |
 |------|-----|------|
@@ -532,7 +540,7 @@ Logs úteis: resposta JSON completa do `curl` (o CLI já imprime via `jq`).
 | ProjectTask | 804 | 4.2 Implementação Back-end |
 | ProjectTask | 805 | 5. Evolução |
 
-UI: `https://suporte.franca.sp.gov.br/front/project.form.php?id=72`
+UI (exemplo): `https://suporte.franca.sp.gov.br/front/project.form.php?id=72`
 
 ---
 
@@ -560,10 +568,12 @@ UI: `https://suporte.franca.sp.gov.br/front/project.form.php?id=72`
 
 | Recurso | Path |
 |---------|------|
+| Manual de integração (rosto Gitness) | `docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md` · `README.md` |
 | Este manual | `docs/06_glpi/MANUAL_USO_GLPI.md` |
 | Visão de integração | `docs/06_glpi/INTEGRACAO_GLPI_GESTAO_PROJETOS.md` |
 | API REST (cópia) | `docs/06_glpi/GLPI-rest-API-documentationmd` |
 | CLI | `tools/glpi/glpi` |
 | Skill follow-up | `.github/skills/glpi-followup/SKILL.md` |
-| Checklist commit | `docs/05-gestao-projeto/geral/FLUXO_COMMIT_CHECKLIST.md` |
-| Plano produto | `docs/05-gestao-projeto/geral/PLANO_IMPLEMENTACAO.md` |
+| Checklist commit | `docs/05_progresso/geral/FLUXO_COMMIT_CHECKLIST.md` |
+| Plano produto | `docs/05_progresso/geral/PLANO_IMPLEMENTACAO.md` |
+| Bootstrap | `scripts/bootstrap-into.sh` |

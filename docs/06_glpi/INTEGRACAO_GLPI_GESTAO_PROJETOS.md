@@ -1,52 +1,56 @@
-# Integração GLPI — SAMU Operacional
+# Integração GLPI — gestão de projetos (pmf-dev-kit)
 
-> Gestão de chamados/tarefas via API REST GLPI para o projeto SIGS-Samu.  
-> Ferramentas (`tools/glpi`, skill `glpi-followup`) são **locais a este repositório** (duplicadas em outros produtos PMF para uso independente).  
-> Hierarquia e docs do **Bot_Pan** ficam no repositório `Bot_Pan` — não neste clone.
+> Abordagem de integração baseada no repositório fonte  
+> [PMF-Integracao_GLPI/pmf-dev-kit](https://gitness.franca.sp.gov.br/PMF-Integracao_GLPI/pmf-dev-kit).  
+> Cada produto **vendoriza** CLI, skills e docs; secrets ficam em `~/.secrets/` na máquina.
 
-**Manual operacional detalhado:** [`MANUAL_USO_GLPI.md`](MANUAL_USO_GLPI.md) (comandos, env, configs, conceitos, troubleshooting).  
-**Reavaliação VSCode ↔ Git ↔ GLPI:** [`REAVALIACAO_VSCODE_GIT_GLPI.md`](REAVALIACAO_VSCODE_GIT_GLPI.md) (gap vs estrutura completa de Projeto/Tarefa e skills alvo).
+**Manual de integração (passo a passo):** [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md)  
+**Manual operacional do CLI:** [`MANUAL_USO_GLPI.md`](MANUAL_USO_GLPI.md)  
+**Hierarquia S/P:** [`HIERARQUIA_S_P_GLPI.md`](HIERARQUIA_S_P_GLPI.md)  
+**Reavaliação VSCode ↔ Git ↔ GLPI:** [`REAVALIACAO_VSCODE_GIT_GLPI.md`](REAVALIACAO_VSCODE_GIT_GLPI.md)
+
+**Última atualização:** 21/07/2026
 
 ---
 
 ## 1. Objetivo
 
-Automatizar registro e acompanhamento de:
+Padronizar, em qualquer produto PMF:
 
-- chamado institucional do SAMU Operacional;
-- `Project` / `ProjectTask` do projeto GLPI 72;
-- follow-ups (`ITILFollowup`) alinhados ao plano `PLANO_IMPLEMENTACAO.md`;
+- registro no **Ticket** institucional (`ITILFollowup`);
+- gestão de **Project** / **ProjectTask** (fases S = pai, itens P = filho);
+- bootstrap e upgrade a partir do kit, sem acoplar o domínio de negócio ao cliente GLPI.
 
-com suporte futuro a polyrepo (`samu-operacional`, `SAMU_CRU`, variante Windows).
+A integração é de **gestão de projeto / auditoria**, não do domínio de aplicação do produto.
 
 ---
 
-## 2. Inventário GLPI (este produto)
+## 2. Modelo de distribuição
 
-| Elemento | Valor |
-|----------|--------|
-| Ticket | **10554** — Samu Operacional |
-| Projeto | **72** — Desenvolvimento PMF SIGS-Samu |
-| Entidade | Prefeitura de Franca |
-| Localização | Paço > SMS > SAMU |
+```text
+pmf-dev-kit          ← fonte (este repositório)
+      │
+      │  bootstrap-into.sh / upgrade-into.sh
+      ▼
+ produto/            ← cópia local (vendorizada)
+   tools/glpi/
+   .glpi/project.yaml
+   docs/06_glpi/
+   .github/skills/glpi-*
+      │
+      ▼
+ ~/.secrets/GLPI-tokens.txt  →  suporte.franca.sp.gov.br
+```
 
-Config: `.glpi/project.yaml`  
-Polyrepo: `.glpi/workspace.yaml`  
-Template de fases: `.glpi/templates/corporate-phases.json`  
-Estado do seed: `.glpi/state-project-72.json`
+| Artefato | Onde vive | Versionar? |
+|----------|-----------|------------|
+| CLI + wrappers | `tools/glpi/` no produto | Sim |
+| Templates / maps | `.glpi/templates/`, `.glpi/maps/` | Sim |
+| `project.yaml` / state | `.glpi/` no produto | Local (gitignore no kit) |
+| Tokens | `~/.secrets/GLPI-tokens.txt` | **Nunca** |
+| Docs GLPI | `docs/06_glpi/` | Sim |
 
-### ProjectTasks seedadas (projeto 72)
-
-| Fase | ProjectTask id |
-|------|----------------|
-| 1. Discovery | 800 |
-| 2. Análise | 801 |
-| 3. Projeto | 802 |
-| 4.1 Implementação Front-end | 803 |
-| 4.2 Implementação Back-end | 804 |
-| 5. Evolução | 805 |
-
-Follow-up de ativação do MVP CLI: ITILFollowup **#12034**.
+Não referenciar paths de outro clone para executar o CLI do produto.
 
 ---
 
@@ -55,81 +59,85 @@ Follow-up de ativação do MVP CLI: ITILFollowup **#12034**.
 | Item | Valor |
 |------|--------|
 | URL | `https://suporte.franca.sp.gov.br/apirest.php` |
-| Secrets | `~/.secrets/GLPI-tokens.txt` (**nunca** versionar) |
+| Secrets | `~/.secrets/GLPI-tokens.txt` |
 | Pessoal | `user_token` |
 | Grupo | `App-Token` (obrigatório nesta instância) |
 
-Referência técnica: `docs/06_glpi/GLPI-rest-API-documentationmd`.
+Detalhes WSL/Windows e variáveis: [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md) §§3–5.
 
 ---
 
-## 4. Modelo
+## 4. Modelo de entidades
 
 | Camada | Itemtype | Papel |
 |--------|----------|--------|
-| Institucional | `Ticket` | Canal oficial (#10554) |
-| Entrega | `Project` + `ProjectTask` | Fases Discovery→Evolução / plano S0–S7 |
+| Institucional | `Ticket` | Canal oficial |
+| Entrega | `Project` + `ProjectTask` | Fases corporativas ou S0–Sn / itens P |
 | Diário | `ITILFollowup` | Commits, deploys, checkpoints |
 
-Integração é de **gestão de projeto**, não do domínio regulatório 195 — não misturar cliente GLPI em `apps/backend`.
+Config por produto: `.glpi/project.yaml` (`ticket_id`, `project_id`, `phase_template`).
 
 ---
 
-## 5. CLI e skill (neste repo)
+## 5. Bootstrap rápido
+
+```bash
+# Clonar o kit
+git clone https://gitness.franca.sp.gov.br/git/PMF-Integracao_GLPI/pmf-dev-kit.git
+
+# Aplicar em projeto existente
+./scripts/bootstrap-into.sh /caminho/do/produto --profile=pmf-core --key=meu-produto
+
+cd /caminho/do/produto
+# editar .glpi/project.yaml
+./tools/glpi/glpi auth
+./tools/glpi/bin/glpi-seed-phases --template=corporate-phases
+```
+
+Perfis: `glpi-only` | `pmf-core` | `full-skeleton` — ver manual de integração.
+
+---
+
+## 6. CLI e skills
 
 ```bash
 ./tools/glpi/glpi auth
 ./tools/glpi/glpi ticket get
-./tools/glpi/glpi ticket followup - "[S1.1] resumo + sha + proximo"
+./tools/glpi/glpi ticket followup - "[Sx] resumo + sha + proximo"
 ./tools/glpi/glpi project get
 ./tools/glpi/glpi project tasks
-./tools/glpi/glpi seed-phases              # dry-run (corporate-phases)
-./tools/glpi/glpi seed-phases --apply
+./tools/glpi/bin/glpi-seed-phases
+./tools/glpi/bin/glpi-retro-scan
+./tools/glpi/bin/glpi-task-upsert --code=S1.P1 --parent-code=S1 --apply
 ```
 
-Skill: `.github/skills/glpi-followup/SKILL.md`  
-Checklist: *follow-up GLPI enviado?* em `docs/05-gestao-projeto/geral/FLUXO_COMMIT_CHECKLIST.md`.
+Skills: `glpi-followup`, `glpi-task-upsert`, `glpi-project-create`, `glpi-retro-scan`.
 
 ---
 
-## 6. Automação (visão)
+## 7. Independência entre produtos
 
-| Meio | Uso |
-|------|-----|
-| Skills Cursor | `glpi-followup`, futuro `encerrar-sessao` / `glpi-retro-scan` |
-| CLI | Operação manual e scripts |
-| CI | Job `glpi-notify` pós-deploy (pendente) |
-| Polyrepo | `.glpi/workspace.yaml` → retro-scan futuro |
-
----
-
-## 7. Independência entre repositórios
-
-| Artefato | samu-operacional | Bot_Pan |
-|----------|------------------|---------|
+| Artefato | Produto A | Produto B |
+|----------|-----------|-----------|
 | CLI + skill | cópia local | cópia local |
-| `.glpi/project.yaml` | ticket 10554 / project 72 | project 12 + hierarquia |
-| Docs hierarquia Bot_Pan | **não** | **sim** (`docs/06_glpi/`, `.glpi/hierarchy.yaml`) |
+| `.glpi/project.yaml` | ticket/project próprios | ticket/project próprios |
 | Secrets | `~/.secrets/` (máquina) | idem |
 
-Não referenciar paths do clone Bot_Pan para executar o CLI deste repo.
+Exemplo histórico: samu-operacional (Ticket 10554 / Project 72) e Bot_Pan (Project 12) — cada um com sua vendorização; o kit não embute IDs de um produto como default obrigatório.
 
 ---
 
-## 8. Roadmap
+## 8. Roadmap (kit)
 
-1. ~~CLI + skill follow-up + seed fases no 72~~ feito
-2. Job CI `glpi-notify` após health OK
-3. `glpi-retro-scan` no bundle `samu` (workspace.yaml)
-4. `glpi-sync-plano` contínuo com `PLANO_IMPLEMENTACAO.md`
-
----
-
-## 9. Plano de produto (contexto)
-
-Ver `docs/05-gestao-projeto/geral/PLANO_IMPLEMENTACAO.md`.  
-**Próximo item ativo:** S1.1 — tela TARM web.
+| Item | Status |
+|------|--------|
+| CLI auth / ticket / project / seed / task upsert | Feito |
+| Skills glpi-* + wrappers `bin/` | Feito |
+| `bootstrap-into` / `upgrade-into` | Feito |
+| `retro-scan` + `retro-apply` | Feito |
+| `--dry-run` no followup | Pendente |
+| CI `glpi-notify` pós-deploy | Pendente |
 
 ---
 
-*Ajustado em 17/07/2026: docs Bot_Pan removidos deste repo; ferramentas mantidas localmente.*
+*Atualizado em 21/07/2026: documentação alinhada ao pmf-dev-kit como fonte de integração.*

@@ -16,3 +16,5 @@ Convenção de pastas (underscores, sem acentos nos nomes):
 | 09 | `09_dados_e_tabelas` | Dados de referência |
 
 **Nota:** em repositórios antigos (ex.: samu-operacional) o GLPI viveu em `docs/00-GLPI`. No kit fonte a identidade numérica `00` é da visão geral; GLPI é **`06_glpi`**.
+
+**Integração GLPI:** comece por [`06_glpi/MANUAL_INTEGRACAO_GLPI.md`](06_glpi/MANUAL_INTEGRACAO_GLPI.md) (também no [`README.md`](../README.md) da raiz / página de rosto no Gitness).
