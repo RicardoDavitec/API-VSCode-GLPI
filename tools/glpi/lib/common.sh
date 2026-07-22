@@ -289,3 +289,73 @@ resolve_project_id() {
   [[ -n "$id" && "$id" != "0" ]] || die "project_id nao informado e ausente em .glpi/project.yaml"
   echo "$id"
 }
+
+# Upload Document (multipart) + opcional vínculo Document_Item.
+# Uso: glpi_document_upload_and_link <arquivo> <nome_doc> <itemtype> <items_id>
+# Retorna JSON {documents_id, document_item_id?, message} via stdout.
+glpi_document_upload_and_link() {
+  local file="$1" doc_name="$2" itemtype="$3" items_id="$4"
+  local base fname manifest resp doc_id link_payload link_resp link_id
+
+  [[ -f "$file" ]] || die "arquivo nao encontrado: $file"
+  case "$(basename "$file" | tr '[:upper:]' '[:lower:]')" in
+    .env|.env.*|*token*|*secret*|*credential*|*password*)
+      die "recusado: arquivo parece conter segredo ($(basename "$file"))"
+      ;;
+  esac
+
+  [[ -n "${GLPI_SESSION_TOKEN}" ]] || die "sessao GLPI nao iniciada"
+  [[ -n "$itemtype" && -n "$items_id" ]] || die "itemtype e items_id obrigatorios"
+
+  base="$(basename "$file")"
+  fname="${doc_name:-$base}"
+  manifest="$(jq -nc \
+    --arg name "$fname" \
+    --arg fn "$base" \
+    '{input: {name: $name, _filename: [$fn]}}')"
+
+  local curl_args=(-sS -X POST)
+  if [[ -n "${GLPI_APP_TOKEN}" ]]; then
+    curl_args+=(-H "App-Token: ${GLPI_APP_TOKEN}")
+  fi
+  curl_args+=(
+    -H "Session-Token: ${GLPI_SESSION_TOKEN}"
+    -F "uploadManifest=${manifest};type=application/json"
+    -F "filename[0]=@${file}"
+  )
+
+  resp="$(curl "${curl_args[@]}" "${GLPI_API_URL}/Document/")" || die "falha no upload Document (rede)"
+  doc_id="$(echo "$resp" | jq -r 'if type=="object" then .id // empty elif type=="array" then .[0].id // empty else empty end')"
+  [[ -n "$doc_id" && "$doc_id" != "null" ]] || die "upload Document falhou: $resp"
+
+  link_payload="$(jq -nc \
+    --argjson did "$doc_id" \
+    --arg it "$itemtype" \
+    --argjson iid "$items_id" \
+    '{input: {documents_id: $did, itemtype: $it, items_id: $iid}}')"
+
+  link_resp="$(echo "$link_payload" | glpi_curl POST "/Document_Item/")"
+  link_id="$(echo "$link_resp" | jq -r 'if type=="object" then .id // empty elif type=="array" then .[0].id // empty else empty end')"
+  [[ -n "$link_id" && "$link_id" != "null" ]] || link_id="null"
+
+  jq -nc \
+    --argjson documents_id "$doc_id" \
+    --argjson document_item_id "$link_id" \
+    --arg itemtype "$itemtype" \
+    --argjson items_id "$items_id" \
+    --arg file "$file" \
+    --arg name "$fname" \
+    --argjson upload "$resp" \
+    --argjson link "$link_resp" \
+    '{
+      ok: true,
+      documents_id: $documents_id,
+      document_item_id: $document_item_id,
+      itemtype: $itemtype,
+      items_id: $items_id,
+      file: $file,
+      name: $name,
+      upload: $upload,
+      link: $link
+    }'
+}

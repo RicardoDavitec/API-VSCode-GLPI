@@ -32,7 +32,9 @@ Comandos:
                            Aplica candidatos do scan em ordem pai→filho
   states discover [--apply] [--preset=NOME] [--out=ARQUIVO]
                            Descobre ProjectState via API e gera maps/states.json
-
+  document attach --file=PATH [--itemtype=Ticket|ProjectTask|Project]
+                  [--items-id=ID|--ticket|--project|--code=S4.P1] [--name=NOME] [--apply]
+                           Upload Document + vinculo Document_Item (dry-run padrao)
 
 Opcoes project create:
   --name=TEXTO (obrigatorio)
@@ -62,6 +64,7 @@ Opcoes comuns (create|patch|upsert):
   --parent-code=S4           (resolve ProjectTask pai no state)
   --parent-task=ID           (ProjectTask pai por id)
   --project=ID               (default: project.yaml)
+  --attach=ARQUIVO           (apos --apply: anexa Document a ProjectTask)
   --json=ARQUIVO|-           (payload JSON; mescla com flags)
   --apply                    Grava no GLPI (sem isso = dry-run)
 
@@ -80,6 +83,7 @@ Exemplos:
   ./tools/glpi/glpi retro-scan
   ./tools/glpi/glpi retro-apply --from=docs/06_glpi/retro-scans/ULTIMO.json
   ./tools/glpi/glpi states discover --apply
+  ./tools/glpi/glpi document attach --file=docs/05_progresso/geral/SESSAO_....md --ticket --apply
   ./tools/glpi/bin/glpi-retro-apply --from=... --codes=S4,S4.P5   # wrapper direto
 EOF
 }
@@ -395,6 +399,7 @@ parse_task_flags() {
   TASK_PARENT_CODE=""
   TASK_PROJECT=""
   TASK_JSON=""
+  TASK_ATTACH=""
   local arg
   while [[ $# -gt 0 ]]; do
     arg="$1"
@@ -417,6 +422,7 @@ parse_task_flags() {
       --parent-code=*) TASK_PARENT_CODE="${arg#--parent-code=}" ;;
       --parent-task=*) TASK_PARENT="${arg#--parent-task=}" ;;
       --project=*) TASK_PROJECT="${arg#--project=}" ;;
+      --attach=*) TASK_ATTACH="${arg#--attach=}" ;;
       --json=*) TASK_JSON="${arg#--json=}" ;;
       -h|--help) return 2 ;;
       *)
@@ -523,6 +529,7 @@ task_do_create() {
     append_task_to_state "$pid" "$new_id" "$(echo "$input" | jq -r '.name')" \
       "${TASK_CODE}" "${TASK_KIND}" "${TASK_PARENT_CODE}" "${parent_resolved}"
     echo "Estado local atualizado (.glpi/state-project-${pid}.json)"
+    TASK_LAST_ID="$new_id"
   fi
 }
 
@@ -575,12 +582,13 @@ cmd_task_patch() {
 
 cmd_task_upsert() {
   parse_task_flags "$@" || {
-    echo "Uso: glpi task upsert --code=S4|--code=S4.P1 [--parent-code=S4] [--name=...] [opcoes] [--apply]"
+    echo "Uso: glpi task upsert --code=S4|--code=S4.P1 [--parent-code=S4] [--name=...] [--attach=ARQ] [opcoes] [--apply]"
     return 0
   }
 
   local pid resolved=""
   pid="$(resolve_project_id "${TASK_PROJECT:-}")"
+  TASK_LAST_ID=""
 
   if [[ -n "$TASK_ID" ]]; then
     resolved="$TASK_ID"
@@ -593,8 +601,8 @@ cmd_task_upsert() {
   if [[ -n "$resolved" ]]; then
     echo "Upsert → PATCH id=${resolved} (code=${TASK_CODE:--} kind=${TASK_KIND:-})"
     task_do_patch "$resolved"
+    TASK_LAST_ID="$resolved"
     if [[ "$TASK_APPLY" -eq 1 ]]; then
-      # recuperar pai do ultimo build (subshell); resolver de novo se preciso
       local parent_resolved=""
       parent_resolved="$(resolve_task_parent_id "$pid" 2>/dev/null || true)"
       append_task_to_state "$pid" "$resolved" "${TASK_NAME:-}" \
@@ -604,6 +612,98 @@ cmd_task_upsert() {
     echo "Upsert → CREATE (nenhum id/code/name no state local; kind=${TASK_KIND:-})"
     task_do_create
   fi
+
+  if [[ -n "${TASK_ATTACH:-}" ]]; then
+    if [[ "$TASK_APPLY" -eq 0 ]]; then
+      echo "Anexo (dry-run): ${TASK_ATTACH} → ProjectTask id=${TASK_LAST_ID:-(apos create)}"
+      echo "  Reexecute com --apply para upload Document + Document_Item."
+    elif [[ -z "${TASK_LAST_ID:-}" ]]; then
+      echo "AVISO: --attach ignorado (sem id de ProjectTask)." >&2
+    else
+      echo "Anexando ${TASK_ATTACH} → ProjectTask ${TASK_LAST_ID}..."
+      # sessao ja pode estar ativa; reabrir se trap matou
+      if [[ -z "${GLPI_SESSION_TOKEN:-}" ]]; then
+        glpi_init_session
+        trap 'glpi_kill_session' EXIT
+      fi
+      glpi_document_upload_and_link "$TASK_ATTACH" "$(basename "$TASK_ATTACH")" "ProjectTask" "$TASK_LAST_ID" | jq .
+    fi
+  fi
+}
+
+cmd_document_attach() {
+  local file="" doc_name="" itemtype="" items_id="" apply=0
+  local use_ticket=0 use_project=0 code="" arg
+
+  for arg in "$@"; do
+    case "$arg" in
+      --file=*) file="${arg#--file=}" ;;
+      --name=*) doc_name="${arg#--name=}" ;;
+      --itemtype=*) itemtype="${arg#--itemtype=}" ;;
+      --items-id=*) items_id="${arg#--items-id=}" ;;
+      --ticket) use_ticket=1; itemtype="${itemtype:-Ticket}" ;;
+      --project) use_project=1; itemtype="${itemtype:-Project}" ;;
+      --code=*) code="${arg#--code=}"; itemtype="${itemtype:-ProjectTask}" ;;
+      --apply) apply=1 ;;
+      -h|--help)
+        cat <<'EOF'
+Uso: glpi document attach --file=PATH [--apply]
+  Destino (um):
+    --ticket                 Ticket de .glpi/project.yaml
+    --project                Project de .glpi/project.yaml
+    --code=S4.P1             ProjectTask via state local
+    --itemtype=X --items-id=N
+  Opcional: --name=NOME_DOC
+
+Dry-run por padrao. GLPI_DRY_RUN=1 forca dry-run.
+EOF
+        return 0
+        ;;
+      *) die "flag desconhecida: $arg" ;;
+    esac
+  done
+  [[ "${GLPI_DRY_RUN:-0}" == "1" ]] && apply=0
+  [[ -n "$file" ]] || die "informe --file=PATH"
+  [[ -f "$file" ]] || die "arquivo nao encontrado: $file"
+
+  load_project_config
+  if [[ "$use_ticket" -eq 1 ]]; then
+    items_id="$(resolve_ticket_id "")"
+    itemtype="Ticket"
+  elif [[ "$use_project" -eq 1 ]]; then
+    items_id="$(resolve_project_id "")"
+    itemtype="Project"
+  elif [[ -n "$code" ]]; then
+    local pid
+    pid="$(resolve_project_id "")"
+    items_id="$(find_task_id_by_code "$code" "$pid" || true)"
+    [[ -n "$items_id" ]] || die "ProjectTask code=$code nao encontrada em .glpi/state-project-${pid}.json"
+    itemtype="ProjectTask"
+  fi
+
+  [[ -n "$itemtype" && -n "$items_id" ]] || die "informe destino: --ticket | --project | --code= | --itemtype= + --items-id="
+
+  case "$itemtype" in
+    Ticket|ProjectTask|Project|ITILFollowup) ;;
+    *) die "itemtype nao suportado: $itemtype (use Ticket|ProjectTask|Project)" ;;
+  esac
+
+  doc_name="${doc_name:-$(basename "$file")}"
+
+  echo "Modo: $([[ "$apply" -eq 1 ]] && echo APPLY || echo DRY-RUN)"
+  echo "Arquivo: $file"
+  echo "Documento: $doc_name"
+  echo "Destino: ${itemtype}#${items_id}"
+
+  if [[ "$apply" -eq 0 ]]; then
+    echo
+    echo "Dry-run. Reexecute com --apply para upload Document + Document_Item."
+    return 0
+  fi
+
+  glpi_init_session
+  trap 'glpi_kill_session' EXIT
+  glpi_document_upload_and_link "$file" "$doc_name" "$itemtype" "$items_id" | jq .
 }
 
 cmd_project_create() {
@@ -825,6 +925,14 @@ main() {
       case "$sub" in
         discover) cmd_states_discover "$@" ;;
         *) die "subcomando states invalido. Use: discover" ;;
+      esac
+      ;;
+    document)
+      local sub="${1:-}"
+      shift || true
+      case "$sub" in
+        attach) cmd_document_attach "$@" ;;
+        *) die "subcomando document invalido. Use: attach" ;;
       esac
       ;;
     *) die "comando desconhecido: $cmd (use --help)" ;;

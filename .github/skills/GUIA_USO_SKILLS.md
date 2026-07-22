@@ -4,12 +4,12 @@
 |-------|-----|
 | atualizar / exporte / importe | Sync Git |
 | backup | Cópia de segurança |
-| encerrar-sessao | `SESSAO_*` em `docs/05_progresso/geral/` |
+| encerrar-sessao | `SESSAO_*` em `docs/05_progresso/geral/` (+ anexo GLPI opcional) |
 | oncoto-oncovo | Situação do plano |
 | commit / documentar | Padrão de commit e docs |
-| glpi-followup | ITILFollowup no Ticket |
-| glpi-task-upsert | ProjectTask S/P |
+| glpi-followup | ITILFollowup no Ticket (+ `document attach` opcional) |
+| glpi-task-upsert | ProjectTask S/P (`--attach=arquivo` opcional) |
 | glpi-project-create | Novo Project |
 | glpi-retro-scan | Candidatos a partir do markdown |
 
-CLI: `tools/glpi/bin/*` · Docs: `docs/06_glpi/`
+CLI: `tools/glpi/bin/*` (inclui `glpi-document-attach`) · Docs: `docs/06_glpi/`

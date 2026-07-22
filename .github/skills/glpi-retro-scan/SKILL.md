@@ -19,6 +19,14 @@ Varre `.glpi/workspace.yaml` e gera relatório de candidatos (dedupe por código
 
 Saída: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`).
 
+## Datas e GEP no JSON
+
+- Commits / blame / similaridade preenchem `real_*` quando aplicável.
+- **Após** reconciliar status:
+  - `gep3` (em andamento) → `real_end = null` (exceto `temporal_source` confirmado: `plan`, `checklist-comment`)
+  - `gep1` (não iniciado) → `real_start` e `real_end` = `null` (mesma exceção)
+- `gep7` (feito) mantém as datas inferidas ou confirmadas.
+
 ## Pós-scan (apply pai→filho)
 
 ```bash
@@ -27,8 +35,18 @@ Saída: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`).
 ./tools/glpi/bin/glpi-retro-apply --from=... --apply   # após revisão
 ```
 
+## Anexo do relatório (após revisão)
+
+O scan **não** grava no GLPI. Depois de revisar o `.md`/`.json`, opcionalmente anexar ao Project ou Ticket:
+
+```bash
+./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO.md --project
+./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO.md --ticket --apply
+```
+
 ## Referências
 
 - `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`
 - `tools/glpi/bin/` — scripts de execução direta
+- `tools/glpi/bin/glpi-document-attach`
 - `tools/glpi/lib/retro_scan.py` / `retro_apply.py`

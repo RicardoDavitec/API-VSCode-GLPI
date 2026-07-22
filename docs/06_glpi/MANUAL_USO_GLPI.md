@@ -390,13 +390,35 @@ Lê `.glpi/workspace.yaml`, varre planos/checklists/**commits** e gera candidato
 
 **Timestamps (v2):** commits no mesmo dia encadeiam `real_start`←commit anterior; 1º do dia usa estimativa (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60). Checklists/planos sem code S/P: `git blame` na linha (`[x]`/`[~]`) + encadeamento no mesmo arquivo/dia; fallback por similaridade de título com commits (`GLPI_RETRO_COMMIT_MATCH_MIN`).
 
+**Comentário HTML em checklist (v4):** imediatamente após (ou na mesma linha de) um `- [x]` / `- [ ]`:
+
+```markdown
+- [x] SSH aberto no servidor
+  <!-- glpi: plan_start="2026-04-23 08:00:00" plan_end="2026-04-23 08:15:00" real_start="2026-04-23 08:00:00" real_end="2026-04-23 08:15:00" temporal_source="correlated" -->
+```
+
+Campos: `plan_start`, `plan_end`, `real_start`, `real_end`, `temporal_source` (não podem ficar vazios no doc-fonte quando a intenção é sync GLPI). Prioridade sobre blame/commits.
+
 **Planos Bot_Pan / genéricos (v3):** `PLANO*.md` sem heading SAMU `Fase N (S4)` — detecta fases `## R1`, `## P7.1`, `## Prioridade N`, `### Fase 0/A`, tabelas com códigos (`R1.1`, `8.3.a`) e checklists `**8.3.a**`.
 
 **Status/GEP:** `[x]`→`gep7`, `[~]`→`gep3`, `[ ]`→`gep1`; evidência só de commit → `gep7` (retro).
 
+**Datas × GEP:** após reconciliar, `gep1` zera `real_start`/`real_end`; `gep3` zera `real_end`. Não altera timestamps confirmados (`temporal_source` = `plan`, `checklist-comment`, `correlated`).
+
 ```bash
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/glpi retro-scan --workspace=.glpi/workspace.yaml
+```
+
+#### `document attach` (anexo)
+
+Upload `Document` + vínculo `Document_Item` (Ticket / Project / ProjectTask). Dry-run por padrão.
+
+```bash
+./tools/glpi/bin/glpi-document-attach --file=PATH --ticket
+./tools/glpi/glpi document attach --file=PATH --ticket --apply
+./tools/glpi/glpi document attach --file=PATH --code=S4.P1 --apply
+./tools/glpi/bin/glpi-task-upsert --code=S4.P1 --name="..." --attach=PATH --apply
 ```
 
 #### `retro-apply --from=JSON` (P1)

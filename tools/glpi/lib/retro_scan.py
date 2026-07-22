@@ -33,6 +33,14 @@ META_ROW_RE = re.compile(
     r"^\|\s*(ID|%|GEP|Plan ini|Plan fim|Real ini|Real fim)\s*\|\s*([^|]+?)\s*\|\s*$",
     re.IGNORECASE,
 )
+# Comentário embutido em checklist Bot_Pan / pmf:
+#   - [x] Título
+#     <!-- glpi: plan_start="..." plan_end="..." real_start="..." real_end="..." temporal_source="..." -->
+GLPI_HTML_COMMENT_RE = re.compile(r"<!--\s*glpi:\s*(.*?)\s*-->", re.IGNORECASE | re.DOTALL)
+GLPI_ATTR_RE = re.compile(
+    r"""(plan_start|plan_end|real_start|real_end|temporal_source)\s*=\s*["']([^"']+)["']""",
+    re.IGNORECASE,
+)
 # Bot_Pan / planos genéricos (sem heading SAMU "Fase N (S4)")
 CHECKBOX_WITH_CODE_RE = re.compile(
     r"^\s*[-*]\s*\[([ xX~])\]\s+(?:\*\*)?"
@@ -164,6 +172,58 @@ def _empty_dates() -> dict:
         "real_end": None,
         "temporal_source": None,
     }
+
+
+def _parse_glpi_html_comment(text: str) -> dict | None:
+    """Extrai plan_*/real_*/temporal_source de `<!-- glpi: ... -->` (inline ou linha seguinte)."""
+    if not text:
+        return None
+    m = GLPI_HTML_COMMENT_RE.search(text)
+    if not m:
+        return None
+    attrs = {k.lower(): v.strip() for k, v in GLPI_ATTR_RE.findall(m.group(1))}
+    if not attrs:
+        return None
+    dates = _empty_dates()
+    for key in ("plan_start", "plan_end", "real_start", "real_end"):
+        if key in attrs:
+            dates[key] = _normalize_ts(attrs[key])
+    src = attrs.get("temporal_source") or None
+    if src:
+        dates["temporal_source"] = src.strip()
+    elif any(dates.get(k) for k in ("plan_start", "plan_end", "real_start", "real_end")):
+        dates["temporal_source"] = "checklist-comment"
+    if not any(dates.get(k) for k in ("plan_start", "plan_end", "real_start", "real_end")):
+        return None
+    # Preenche pares faltantes para não deixar null quando o comentário trouxe evidência parcial
+    if dates.get("real_start") and not dates.get("plan_start"):
+        dates["plan_start"] = dates["real_start"]
+    if dates.get("real_end") and not dates.get("plan_end"):
+        dates["plan_end"] = dates["real_end"]
+    if dates.get("plan_start") and not dates.get("real_start"):
+        dates["real_start"] = dates["plan_start"]
+    if dates.get("plan_end") and not dates.get("real_end"):
+        dates["real_end"] = dates["plan_end"]
+    return dates
+
+
+def _strip_glpi_html_comment(text: str) -> str:
+    return GLPI_HTML_COMMENT_RE.sub("", text or "").strip()
+
+
+def _dates_from_checkbox_context(lines: list[str], idx: int) -> dict | None:
+    """Lê meta GLPI na mesma linha do checkbox ou na linha imediatamente seguinte."""
+    if idx < 0 or idx >= len(lines):
+        return None
+    same = _parse_glpi_html_comment(lines[idx])
+    if same:
+        return same
+    if idx + 1 < len(lines):
+        nxt = lines[idx + 1]
+        # só aceita linha seguinte se for o comentário (ou só whitespace + comentário)
+        if GLPI_HTML_COMMENT_RE.search(nxt) and not CHECK_RE.match(nxt):
+            return _parse_glpi_html_comment(nxt)
+    return None
 
 
 def _parse_percent(v: str) -> int | None:
@@ -654,8 +714,9 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
             if mcode:
                 st = status_from_mark(mcode.group(1))
                 code = mcode.group(2).upper()
-                title = mcode.group(3).strip()
+                title = _strip_glpi_html_comment(mcode.group(3))
                 parent = _parent_code_from_item(code, current_phase)
+                dates = _dates_from_checkbox_context(lines, i - 1)
                 phase_items.append(
                     _make_plan_item(
                         code=code,
@@ -666,7 +727,8 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                         repo_path=repo_path,
                         repo_id=repo_id,
                         line_no=i,
-                        confidence=0.88,
+                        confidence=0.92 if dates else 0.88,
+                        dates=dates,
                     )
                 )
                 continue
@@ -677,7 +739,7 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
             m = CHECK_RE.match(line)
             if m:
                 st = status_from_mark(m.group(1))
-                title = m.group(2).strip()
+                title = _strip_glpi_html_comment(m.group(2))
             else:
                 m2 = TABLE_STATUS_RE.match(line)
                 if m2:
@@ -696,6 +758,7 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                     continue
                 if low.startswith("pendente") and len(title) < 50:
                     continue
+                dates = _dates_from_checkbox_context(lines, i - 1)
                 inline_code = _extract_item_code(title)
                 if inline_code:
                     title = re.sub(
@@ -715,7 +778,8 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                             repo_path=repo_path,
                             repo_id=repo_id,
                             line_no=i,
-                            confidence=0.86,
+                            confidence=0.92 if dates else 0.86,
+                            dates=dates,
                         )
                     )
                     continue
@@ -731,6 +795,8 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                         repo_path=repo_path,
                         repo_id=repo_id,
                         line_no=i,
+                        confidence=0.9 if dates else 0.85,
+                        dates=dates,
                     )
                 )
                 continue
@@ -764,13 +830,49 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
 
 
 def scan_other_markdown(repo_path: Path, repo_id: str) -> list[dict]:
-    """Checklists/TODOs avulsos → itens (sem pai, se nao houver S no titulo)."""
+    """Checklists/TODOs avulsos → itens (sem pai, se nao houver S no titulo).
+
+    Datas: comentário HTML `<!-- glpi: plan_start=... -->` na mesma linha ou na seguinte
+    (prioridade sobre git-blame/commits).
+    """
     out: list[dict] = []
     patterns = ["**/CHECKLIST*.md", "**/*TODO*.md", "**/*TAREFAS*.md"]
-    files: set[Path] = set()
+    files_raw: set[Path] = set()
     for pat in patterns:
-        files.update(repo_path.glob(pat))
-    files = {f for f in files if "FLUXO_COMMIT" not in f.name.upper() and "PLANO" not in f.name.upper()}
+        files_raw.update(repo_path.glob(pat))
+    # Também varre markdown com comentário glpi embutido (SESSAO, ROADMAP, etc.)
+    for f in repo_path.rglob("*.md"):
+        if "node_modules" in f.parts or ".git" in f.parts:
+            continue
+        try:
+            sample = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "<!-- glpi:" in sample.lower() and re.search(r"^\s*[-*]\s*\[[ xX~]\]\s+", sample, re.M):
+            files_raw.add(f)
+    for f in repo_path.rglob("*.MD"):
+        if "node_modules" in f.parts or ".git" in f.parts:
+            continue
+        try:
+            sample = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "<!-- glpi:" in sample.lower() and re.search(r"^\s*[-*]\s*\[[ xX~]\]\s+", sample, re.M):
+            files_raw.add(f)
+    files: set[Path] = set()
+    for f in files_raw:
+        name_u = f.name.upper()
+        if "PLANO" in name_u:
+            # PLANO*.md já é coberto por scan_plano_hierarchy (com parse do comentário glpi)
+            continue
+        if "FLUXO_COMMIT" in name_u:
+            # Template operacional: só inclui se já tiver meta glpi embutida
+            try:
+                if "<!-- glpi:" not in f.read_text(encoding="utf-8", errors="replace").lower():
+                    continue
+            except OSError:
+                continue
+        files.add(f)
 
     for f in sorted(files):
         if "node_modules" in f.parts:
@@ -783,8 +885,9 @@ def scan_other_markdown(repo_path: Path, repo_id: str) -> list[dict]:
             m = CHECK_RE.match(line)
             if not m:
                 continue
-            title = m.group(2).strip()
+            title = _strip_glpi_html_comment(m.group(2))
             st = status_from_mark(m.group(1))
+            dates = _dates_from_checkbox_context(lines, i - 1) or _empty_dates()
             sm = S_CODE_RE.search(title)
             parent = None
             code = None
@@ -799,6 +902,7 @@ def scan_other_markdown(repo_path: Path, repo_id: str) -> list[dict]:
                     parent = re.match(r"^(S\d+)", raw)
                     parent = parent.group(1) if parent else None
                     code = raw.replace(".", ".P") if parent else raw
+            conf = 0.9 if any(dates.get(k) for k in DATE_FIELDS) else 0.55
             out.append(
                 {
                     "kind": kind,
@@ -808,8 +912,8 @@ def scan_other_markdown(repo_path: Path, repo_id: str) -> list[dict]:
                     "status_local": st,
                     "percent_done": percent_from_status(st),
                     "state": state_from_status(st),
-                    **_empty_dates(),
-                    "confidence": 0.55,
+                    **dates,
+                    "confidence": conf,
                     "source_repos": [repo_id],
                     "sources": [
                         {
@@ -1127,6 +1231,46 @@ def reconcile_status_for_retro(cands: list[dict]) -> None:
         m = re.match(r"gep\s*(\d+)", state)
         if m:
             c["state"] = f"gep{m.group(1)}"
+
+
+# temporal_source considerados confirmados (não limpar real_* por GEP)
+CONFIRMED_TEMPORAL_SOURCES = frozenset(
+    {
+        "plan",
+        "checklist-comment",
+        "correlated",
+    }
+)
+
+
+def _is_confirmed_temporal(c: dict) -> bool:
+    """Timestamps vindos do plano/comentário HTML explícito — não zerar por GEP."""
+    src = (c.get("temporal_source") or "").strip().lower()
+    if not src:
+        return False
+    if src in CONFIRMED_TEMPORAL_SOURCES:
+        return True
+    if src.startswith("plan"):
+        return True
+    return False
+
+
+def nullify_real_dates_by_state(cands: list[dict]) -> None:
+    """gep1: real_start/real_end=null; gep3: real_end=null.
+    Exceto timestamps confirmados (plan / checklist-comment).
+    """
+    for c in cands:
+        if _is_confirmed_temporal(c):
+            continue
+        state = (c.get("state") or "").lower().replace(" ", "")
+        m = re.match(r"gep(\d+)", state)
+        gep = m.group(1) if m else ""
+        if gep == "1":
+            c["real_start"] = None
+            c["real_end"] = None
+        elif gep == "3":
+            c["real_end"] = None
+
 
 def enrich_phase_dates_from_children(cands: list[dict]) -> None:
     """Fase S: datas = min(real_start)/max(real_end) dos filhos; status agregado."""
@@ -1474,6 +1618,7 @@ def main() -> int:
     fill_null_dates_from_commit_sources(cands)
     reconcile_status_for_retro(cands)
     enrich_phase_dates_from_children(cands)
+    nullify_real_dates_by_state(cands)
     for c in cands:
         name = c["title"]
         code = (c.get("code") or "").upper()
