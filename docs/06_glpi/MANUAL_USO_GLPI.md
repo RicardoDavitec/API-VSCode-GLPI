@@ -388,7 +388,9 @@ Skill: `.github/skills/glpi-project-create/SKILL.md`.
 
 Lê `.glpi/workspace.yaml`, varre planos/checklists/**commits** e gera candidatos **S (pai)** / **P (filho)** em `docs/06_glpi/retro-scans/`.
 
-**Timestamps (v2):** commits no mesmo dia encadeiam `real_start`←commit anterior e `real_end`←commit atual; o 1º do dia usa estimativa (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60). Datas do plano têm prioridade; commits preenchem `null`.
+**Timestamps (v2):** commits no mesmo dia encadeiam `real_start`←commit anterior; 1º do dia usa estimativa (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60). Checklists/planos sem code S/P: `git blame` na linha (`[x]`/`[~]`) + encadeamento no mesmo arquivo/dia; fallback por similaridade de título com commits (`GLPI_RETRO_COMMIT_MATCH_MIN`).
+
+**Planos Bot_Pan / genéricos (v3):** `PLANO*.md` sem heading SAMU `Fase N (S4)` — detecta fases `## R1`, `## P7.1`, `## Prioridade N`, `### Fase 0/A`, tabelas com códigos (`R1.1`, `8.3.a`) e checklists `**8.3.a**`.
 
 **Status/GEP:** `[x]`→`gep7`, `[~]`→`gep3`, `[ ]`→`gep1`; evidência só de commit → `gep7` (retro).
 

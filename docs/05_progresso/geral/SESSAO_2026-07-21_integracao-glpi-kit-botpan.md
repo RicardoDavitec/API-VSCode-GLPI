@@ -5,7 +5,7 @@
 - Documentação e generalização do **pmf-dev-kit** (preset `api-vscode-glpi`, assistentes bash/Python, autoria MIT).
 - Publicação no Gitness e espelho no GitHub (`RicardoDavitec/API-VSCode-GLPI`).
 - Upgrade GLPI no **Bot_Pan**; testes dry-run de install e **retro-scan**.
-- Evolução do `retro_scan.py`: timestamps a partir de commits + GEP; gap restante: checklists sem vínculo S/P ainda com datas `null`.
+- Evolução do `retro_scan.py`: timestamps a partir de commits + GEP; **git blame** em checklists sem code S/P.
 
 ## Commits da sessão (kit)
 
@@ -19,7 +19,7 @@ Push também para remoto `github` (histórico completo até o commit desta sess�
 
 ## Problemas
 
-- Retro-scan no Bot_Pan: ~80 candidatos (commits) com datas; ~209 checklists sem `code` S/P permanecem com `plan_*`/`real_*` = `null` (sem merge com commits).
+- Retro-scan no Bot_Pan: commits com datas; checklists `[x]` ganham datas via **git blame** (itens `[ ]` permanecem sem `real_*`).
 - Parser de plano S/P estilo SAMU não extrai fases dos `PLANO*.md` do Bot_Pan (0 candidatos `plan`).
 - Artefatos em `docs/06_glpi/retro-scans/*.json|.md` estão no `.gitignore` (não aparecem no Explorer do IDE).
 
@@ -32,8 +32,8 @@ Push também para remoto `github` (histórico completo até o commit desta sess�
 
 ## Próximas ações
 
-1. Associar timestamps a checklists/planos Bot_Pan (vínculo por dia/código/heurística).
-2. Adaptar parser de plano ao formato do Bot_Pan (ou template S/P).
+1. ~~Associar timestamps a checklists/planos Bot_Pan (vínculo por dia/código/heurística).~~ **Feito:** `git blame` + encadeamento + similaridade com commits.
+2. ~~Adaptar parser de plano ao formato do Bot_Pan (ou template S/P).~~ **Feito:** fases R/P, Prioridade, Fase N, tabelas e códigos inline.
 3. Retestar mono + polyrepo (`workspace.yaml` linhagem) após o fix.
 4. (Opcional) `upgrade-into` Bot_Pan de novo e gerar novo `*_botpan-mono.json`.
 

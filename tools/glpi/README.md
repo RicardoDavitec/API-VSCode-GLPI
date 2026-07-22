@@ -7,11 +7,13 @@ Assistentes: `scripts/install-glpi.sh` · `scripts/install_glpi.py`
 
 ## Retro-scan (timestamps e GEP)
 
-O `retro-scan` preenche datas a partir de **commits**:
+O `retro-scan` preenche datas a partir de **commits** e de **checklists/planos sem code S/P**:
 
-- mesmo dia: `real_start` = commit anterior, `real_end` = commit atual (`temporal_source: commit-chain`)
-- 1º commit do dia: estima duração (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60) e subtrai (`temporal_source: estimated`)
-- plano/checklist com datas preenchidas têm prioridade; commits preenchem campos `null`
+- **commits:** mesmo dia encadeia `real_start`←commit anterior; 1º do dia estima duração (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60)
+- **checklists/planos `[x]`/`[~]`:** `git blame` na linha do markdown → `real_end`; itens do mesmo arquivo no mesmo dia encadeiam início (`git-blame-chain`)
+- **fallback:** similaridade de título checklist↔commit (`GLPI_RETRO_COMMIT_MATCH_MIN`, default 0.35)
+- **planos Bot_Pan:** fases `R1`/`P7.1`/`Prioridade N`/`Fase 0` + itens de tabela e `**8.3.a**` em checkboxes
+- plano/checklist com colunas Plan/Real têm prioridade; commits/blame preenchem `null`
 - status: `[x]`/`done` → `gep7`; `[~]` → `gep3`; `[ ]` → `gep1`; só commit → `gep7` (retro)
 
 ```bash

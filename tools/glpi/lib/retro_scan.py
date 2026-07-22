@@ -33,6 +33,24 @@ META_ROW_RE = re.compile(
     r"^\|\s*(ID|%|GEP|Plan ini|Plan fim|Real ini|Real fim)\s*\|\s*([^|]+?)\s*\|\s*$",
     re.IGNORECASE,
 )
+# Bot_Pan / planos genéricos (sem heading SAMU "Fase N (S4)")
+CHECKBOX_WITH_CODE_RE = re.compile(
+    r"^\s*[-*]\s*\[([ xX~])\]\s+(?:\*\*)?"
+    r"([A-Za-z]?\d+(?:\.\d+)*(?:\.[a-z])?|[RUP]\d+(?:\.\d+)?)"
+    r"\*\*\s+(.+)$",
+    re.IGNORECASE,
+)
+PLAIN_BULLET_RE = re.compile(r"^\s*[-*]\s+(?!\[)(.+)$")
+BOTPAN_SUBPHASE_RE = re.compile(
+    r"^###\s+Fase\s+(\d+|[A-Z])\s*[—\-–:]?\s*(.*)$",
+    re.IGNORECASE,
+)
+TABLE_DONE_RE = re.compile(r"✅|☑|conclu[ií]do|done|\[x\]", re.IGNORECASE)
+TABLE_PARTIAL_RE = re.compile(r"⏳|parcial|partial|\[~?\]", re.IGNORECASE)
+PLAN_ACTION_SECTION_RE = re.compile(
+    r"checklist|proximos\s+passos|próximos\s+passos|fases?\s+de\s+implementa",
+    re.IGNORECASE,
+)
 
 
 def load_workspace(path: Path) -> dict:
@@ -185,6 +203,183 @@ def phase_status_from_items(items: list[dict]) -> str:
     return "pending"
 
 
+def _plan_file_prefix(f: Path) -> str:
+    stem = re.sub(r"^PLANO_?", "", f.stem, flags=re.IGNORECASE)
+    slug = re.sub(r"[^A-Z0-9]", "", stem.upper())[:10]
+    return slug or "PLAN"
+
+
+def _extract_item_code(cell: str) -> str | None:
+    cell = _clean_cell(cell)
+    if not cell or cell in {"—", "-", "–", "#"}:
+        return None
+    m = re.match(
+        r"^(?:\*\*)?"
+        r"([A-Za-z]?\d+(?:\.\d+)*(?:\.[a-z])?|[RUP]\d+(?:\.\d+)?)"
+        r"(?:\*\*)?(?:\s|$|[—\-–:])",
+        cell,
+        re.IGNORECASE,
+    )
+    return m.group(1).upper() if m else None
+
+
+def _parent_code_from_item(code: str, current_phase: str | None) -> str | None:
+    code = (code or "").upper()
+    for pat in (r"^(R\d+)\.", r"^(P\d+)\."):
+        m = re.match(pat, code)
+        if m:
+            return m.group(1)
+    m = re.match(r"^(\d+\.\d+)\.", code)
+    if m:
+        return m.group(1)
+    m = re.match(r"^(\d+)\.", code)
+    if m:
+        if current_phase and re.match(r"^F\d+$", current_phase, re.I):
+            return current_phase
+        return current_phase or f"SEC{m.group(1)}"
+    if re.match(r"^[RUP]\d+(?:\.\d+)?$", code):
+        return code.split(".")[0] if "." in code else code
+    return current_phase
+
+
+def _parse_botpan_phase_heading(line: str, file_prefix: str) -> tuple[str, str] | None:
+    """Headings ## R1, ## P7.1, ## Prioridade N, ## Semana N, ## Checklist X."""
+    patterns: list[tuple[re.Pattern[str], str]] = [
+        (re.compile(r"^##\s+(R\d+)\s*[—\-–:](.*)$", re.I), r"\1"),
+        (re.compile(r"^##\s+(P\d+(?:\.\d+)?)\s*[—\-–:](.*)$", re.I), r"\1"),
+        (re.compile(r"^##\s+Prioridade\s+(\d+)\s*[—\-–:]?(.*)$", re.I), rf"{file_prefix}.PRI\1"),
+        (re.compile(r"^##\s+Semana\s+(\d+)\b[—\-–:]?(.*)$", re.I), r"SEM\1"),
+        (re.compile(r"^##\s+Checklist\s+([\d.]+[a-z]?)\b[—\-–:]?(.*)$", re.I), r"\1"),
+        (
+            re.compile(
+                r"^##\s+.*?(checklist|proximos\s+passos|próximos\s+passos|fases?\s+de\s+implementa)",
+                re.I,
+            ),
+            rf"{file_prefix}.ACT",
+        ),
+    ]
+    for pat, code_tpl in patterns:
+        m = pat.match(line)
+        if not m:
+            continue
+        if "\\1" in code_tpl or file_prefix in code_tpl:
+            code = m.expand(code_tpl).upper()
+        else:
+            code = code_tpl.upper()
+        title = (m.group(m.lastindex) if m.lastindex else "").strip() or line.lstrip("#").strip()
+        return code, title
+    return None
+
+
+def _is_plan_table_header(row: list[str]) -> bool:
+    low = {c.lower() for c in row}
+    markers = {
+        "id", "item", "status", "#", "modulo", "módulo", "tarefa", "entrega",
+        "escopo", "detalhe", "criterio", "critério", "entregavel", "entregável",
+    }
+    return len(markers & low) >= 2
+
+
+def _status_from_table_cells(cols: list[str]) -> str:
+    text = " ".join(cols)
+    if TABLE_DONE_RE.search(text):
+        return "done"
+    if TABLE_PARTIAL_RE.search(text):
+        return "partial"
+    return "pending"
+
+
+def _make_plan_item(
+    *,
+    code: str | None,
+    parent_code: str | None,
+    title: str,
+    status_local: str,
+    f: Path,
+    repo_path: Path,
+    repo_id: str,
+    line_no: int,
+    confidence: float = 0.85,
+    dates: dict | None = None,
+) -> dict:
+    d = dates or _empty_dates()
+    return {
+        "kind": "item",
+        "code": code,
+        "parent_code": parent_code,
+        "title": title[:200],
+        "status_local": status_local,
+        "percent_done": percent_from_status(status_local),
+        "state": state_from_status(status_local),
+        **d,
+        "confidence": confidence,
+        "source_repos": [repo_id],
+        "sources": [{"kind": "plan", "path": str(f.relative_to(repo_path)), "line": line_no}],
+    }
+
+
+def _item_from_plan_table_row(
+    cols: list[str],
+    headers: list[str],
+    current_phase: str | None,
+    f: Path,
+    repo_path: Path,
+    repo_id: str,
+    line_no: int,
+    item_idx: int,
+) -> dict | None:
+    """Tabelas Bot_Pan: # | Modulo | Tarefa | ... ou Item | Entrega | Status."""
+    hmap = {h.lower(): i for i, h in enumerate(headers)}
+
+    def col(*names: str) -> str:
+        for n in names:
+            i = hmap.get(n.lower())
+            if i is not None and i < len(cols):
+                return cols[i]
+        return ""
+
+    code = _extract_item_code(col("#", "id", "item", "código", "codigo"))
+    if not code and cols:
+        code = _extract_item_code(cols[0])
+    if not code and len(cols) >= 2:
+        code = _extract_item_code(cols[1])
+
+    title = _clean_cell(
+        col("tarefa", "entrega", "item", "detalhe", "escopo", "tela", "entregável", "entregavel", "critério", "criterio")
+    )
+    if not title:
+        for c in cols[1:]:
+            t = _clean_cell(c)
+            if t and not _extract_item_code(t) and t.lower() not in {"—", "-", "p0", "p1", "p2", "p3"}:
+                title = t
+                break
+    if not title:
+        return None
+    if title.lower() in {"item", "tarefa", "modulo", "módulo", "entrega", "status", "#"}:
+        return None
+
+    st = _status_from_table_cells(cols)
+    status_raw = _clean_cell(col("status", "resultado", "critério", "criterio"))
+    if STATUS_CELL_RE.match(status_raw):
+        st = status_from_mark(STATUS_CELL_RE.match(status_raw).group(1))  # type: ignore[union-attr]
+
+    parent = _parent_code_from_item(code, current_phase) if code else current_phase
+    if not code and current_phase:
+        code = f"{current_phase}.P{item_idx}"
+
+    return _make_plan_item(
+        code=code,
+        parent_code=parent,
+        title=title,
+        status_local=st,
+        f=f,
+        repo_path=repo_path,
+        repo_id=repo_id,
+        line_no=line_no,
+        confidence=0.9 if code else 0.82,
+    )
+
+
 def _item_from_enriched_row(cols: list[str], headers: list[str], current_phase: str, f: Path, repo_path: Path, repo_id: str, line_no: int) -> dict | None:
     """Tabela nova: ID | Item | Status | % | Plan ini | Plan fim | Real ini | Real fim | Critério | GEP"""
     hmap = {h.lower(): i for i, h in enumerate(headers)}
@@ -260,7 +455,7 @@ def _item_from_enriched_row(cols: list[str], headers: list[str], current_phase: 
 
 
 def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
-    """Extrai S (pai) e P (filho) de PLANO_*.md estilo SAMU (modelo enriquecido)."""
+    """Extrai fases (S/pai) e itens (P/filho) de PLANO_*.md — SAMU enriquecido + Bot_Pan."""
     out: list[dict] = []
     files = sorted(repo_path.glob("**/PLANO*.md"))
     files = [f for f in files if "node_modules" not in f.parts and ".git" not in f.parts]
@@ -271,6 +466,7 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
         except OSError:
             continue
 
+        file_prefix = _plan_file_prefix(f)
         current_phase: str | None = None
         current_phase_title: str | None = None
         current_phase_line = 0
@@ -332,6 +528,7 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
             table_headers = None
 
         for i, line in enumerate(lines, 1):
+            # SAMU: ## Fase N (S4)
             hm = PHASE_HEADING_RE.match(line) or PHASE_HEADING_ALT_RE.match(line)
             if hm:
                 flush_phase()
@@ -344,10 +541,71 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                 item_idx = 0
                 continue
 
+            # Bot_Pan: ### Fase 0 / Fase A
+            sub = BOTPAN_SUBPHASE_RE.match(line)
+            if sub:
+                flush_phase()
+                current_phase = f"F{sub.group(1).upper()}"
+                current_phase_title = line.lstrip("#").strip()
+                current_phase_line = i
+                item_idx = 0
+                continue
+
+            # Bot_Pan: ## R1, ## P7.1, ## Prioridade N, ## Checklist …
+            bp = _parse_botpan_phase_heading(line, file_prefix)
+            if bp:
+                flush_phase()
+                current_phase, current_phase_title = bp[0].upper(), bp[1] or line.lstrip("#").strip()
+                current_phase_line = i
+                item_idx = 0
+                table_headers = None
+                continue
+
+            # Encerrar fase ao encontrar ## genérico (Referencias, Objetivo, etc.)
+            if line.startswith("## ") and current_phase:
+                flush_phase()
+                current_phase = None
+                current_phase_title = None
+                table_headers = None
+                # reprocessar como possível nova fase/checklist
+                bp2 = _parse_botpan_phase_heading(line, file_prefix)
+                if bp2:
+                    current_phase, current_phase_title = bp2[0].upper(), bp2[1] or line.lstrip("#").strip()
+                    current_phase_line = i
+                    item_idx = 0
+                    continue
+                if PLAN_ACTION_SECTION_RE.search(line):
+                    current_phase = f"{file_prefix}.ACT"
+                    current_phase_title = line.lstrip("#").strip()
+                    current_phase_line = i
+                    item_idx = 0
+                    continue
+                continue
+
+            if not current_phase:
+                # Seções com checklist sem heading de fase explícito
+                if line.startswith("## ") and PLAN_ACTION_SECTION_RE.search(line):
+                    flush_phase()
+                    current_phase = f"{file_prefix}.ACT"
+                    current_phase_title = line.lstrip("#").strip()
+                    current_phase_line = i
+                    item_idx = 0
+                    continue
+                # ### com código R/P no título (critérios de aceite)
+                if line.startswith("### "):
+                    m = re.search(r"\b(R\d+|P\d+(?:\.\d+)?)\b", line, re.I)
+                    if m:
+                        flush_phase()
+                        current_phase = m.group(1).upper()
+                        current_phase_title = line.lstrip("#").strip()
+                        current_phase_line = i
+                        item_idx = 0
+                        continue
+
             if not current_phase:
                 continue
 
-            # Meta fase (Campo | Valor)
+            # Meta fase (Campo | Valor) — SAMU
             mm = META_ROW_RE.match(line)
             if mm:
                 key = mm.group(1).strip().lower()
@@ -372,20 +630,48 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
 
             row = _parse_table_row(line)
             if row:
-                # header?
                 low = [c.lower() for c in row]
-                if "id" in low and ("item" in low or "status" in low):
+                if _is_plan_table_header(row) or ("id" in low and ("item" in low or "status" in low)):
                     table_headers = row
                     continue
-                if table_headers and len(row) >= 3:
+                if table_headers and len(row) >= 2:
                     enriched = _item_from_enriched_row(
                         row, table_headers, current_phase, f, repo_path, repo_id, i
                     )
                     if enriched:
                         phase_items.append(enriched)
                         continue
+                    botpan_row = _item_from_plan_table_row(
+                        row, table_headers, current_phase, f, repo_path, repo_id, i, item_idx
+                    )
+                    if botpan_row:
+                        item_idx += 1
+                        phase_items.append(botpan_row)
+                        continue
 
-            # legado: checkbox ou tabela Status na 2ª coluna
+            # Checkbox com código inline: - [ ] **8.3.a** Título
+            mcode = CHECKBOX_WITH_CODE_RE.match(line)
+            if mcode:
+                st = status_from_mark(mcode.group(1))
+                code = mcode.group(2).upper()
+                title = mcode.group(3).strip()
+                parent = _parent_code_from_item(code, current_phase)
+                phase_items.append(
+                    _make_plan_item(
+                        code=code,
+                        parent_code=parent,
+                        title=title,
+                        status_local=st,
+                        f=f,
+                        repo_path=repo_path,
+                        repo_id=repo_id,
+                        line_no=i,
+                        confidence=0.88,
+                    )
+                )
+                continue
+
+            # Checkbox legado ou tabela Status na 2ª coluna
             title = None
             st = None
             m = CHECK_RE.match(line)
@@ -398,42 +684,79 @@ def scan_plano_hierarchy(repo_path: Path, repo_id: str) -> list[dict]:
                     title = m2.group(1).strip()
                     st = status_from_mark(m2.group(2))
                     if title.upper().startswith("S") and ".P" in title.upper():
-                        # já tratado no enriched
                         continue
-                    if title.lower() in {"item", "id", "status", "critério de teste", "criterio de teste", "%", "gep"}:
+                    if title.lower() in {
+                        "item", "id", "status", "critério de teste", "criterio de teste", "%", "gep",
+                    }:
                         continue
 
-            if not title or not st:
-                continue
-            low = title.lower()
-            if low in {"item", "status", "critério de teste", "criterio de teste", "campo", "valor"}:
-                continue
-            if low.startswith("pendente") and len(title) < 50:
+            if title and st:
+                low = title.lower()
+                if low in {"item", "status", "critério de teste", "criterio de teste", "campo", "valor"}:
+                    continue
+                if low.startswith("pendente") and len(title) < 50:
+                    continue
+                inline_code = _extract_item_code(title)
+                if inline_code:
+                    title = re.sub(
+                        r"^(?:\*\*)?" + re.escape(inline_code) + r"(?:\*\*)?\s*[—\-–:]?\s*",
+                        "",
+                        title,
+                        flags=re.I,
+                    ).strip() or title
+                    item_idx += 1
+                    phase_items.append(
+                        _make_plan_item(
+                            code=inline_code,
+                            parent_code=_parent_code_from_item(inline_code, current_phase),
+                            title=title,
+                            status_local=st,
+                            f=f,
+                            repo_path=repo_path,
+                            repo_id=repo_id,
+                            line_no=i,
+                            confidence=0.86,
+                        )
+                    )
+                    continue
+                item_idx += 1
+                child_code = f"{current_phase}.P{item_idx}"
+                phase_items.append(
+                    _make_plan_item(
+                        code=child_code,
+                        parent_code=current_phase,
+                        title=title,
+                        status_local=st,
+                        f=f,
+                        repo_path=repo_path,
+                        repo_id=repo_id,
+                        line_no=i,
+                    )
+                )
                 continue
 
-            item_idx += 1
-            child_code = f"{current_phase}.P{item_idx}"
-            phase_items.append(
-                {
-                    "kind": "item",
-                    "code": child_code,
-                    "parent_code": current_phase,
-                    "title": title[:200],
-                    "status_local": st,
-                    "percent_done": percent_from_status(st),
-                    "state": state_from_status(st),
-                    **_empty_dates(),
-                    "confidence": 0.85,
-                    "source_repos": [repo_id],
-                    "sources": [
-                        {
-                            "kind": "plan",
-                            "path": str(f.relative_to(repo_path)),
-                            "line": i,
-                        }
-                    ],
-                }
-            )
+            # Bullets simples (Prioridade N — PLANO_PARALELO)
+            mb = PLAIN_BULLET_RE.match(line)
+            if mb and current_phase and not line.strip().startswith("|"):
+                bullet_title = mb.group(1).strip()
+                if len(bullet_title) < 8:
+                    continue
+                if bullet_title.lower().startswith(("ver ", "http", "https", "docs/", "./")):
+                    continue
+                item_idx += 1
+                phase_items.append(
+                    _make_plan_item(
+                        code=f"{current_phase}.P{item_idx}",
+                        parent_code=current_phase,
+                        title=bullet_title,
+                        status_local="pending",
+                        f=f,
+                        repo_path=repo_path,
+                        repo_id=repo_id,
+                        line_no=i,
+                        confidence=0.72,
+                    )
+                )
 
         flush_phase()
 
@@ -671,6 +994,20 @@ SOURCE_KIND_SCORE = {
 
 DATE_FIELDS = ("plan_start", "plan_end", "real_start", "real_end")
 
+# Palavras muito comuns em checklists/commits (PT) — ignoradas na similaridade
+_STOP_WORDS = frozenset(
+    {
+        "a", "ao", "aos", "as", "com", "da", "das", "de", "do", "dos", "e", "em", "na", "no",
+        "nos", "nas", "o", "os", "para", "por", "um", "uma", "criar", "implementar", "validar",
+        "revisar", "iniciar", "fechar", "adicionar", "atualizar", "confirmar", "preparar",
+        "feat", "fix", "docs", "chore", "ci", "infra", "geral", "mobile", "web", "backend",
+        "the", "and", "for", "with",
+    }
+)
+
+# Score mínimo (Jaccard) para associar checklist ↔ commit sem code S/P
+COMMIT_MATCH_MIN_SCORE = float(os.environ.get("GLPI_RETRO_COMMIT_MATCH_MIN", "0.35"))
+
 
 def _source_score(c: dict) -> int:
     scores = [SOURCE_KIND_SCORE.get(s.get("kind", ""), 10) for s in c.get("sources", [])]
@@ -832,6 +1169,220 @@ def enrich_phase_dates_from_children(cands: list[dict]) -> None:
                     phase["state"] = state_from_status(agg)
 
 
+def _tokenize_for_match(text: str) -> set[str]:
+    text = re.sub(r"[^\w\s]", " ", (text or "").lower())
+    return {t for t in text.split() if len(t) > 2 and t not in _STOP_WORDS}
+
+
+def _title_similarity(a: str, b: str) -> float:
+    """Similaridade Jaccard entre tokens + bônus por substring."""
+    ta, tb = _tokenize_for_match(a), _tokenize_for_match(b)
+    if not ta or not tb:
+        return 0.0
+    inter = ta & tb
+    union = ta | tb
+    jaccard = len(inter) / len(union) if union else 0.0
+    al, bl = (a or "").lower(), (b or "").lower()
+    substr_bonus = 0.0
+    if len(al) >= 8 and al in bl:
+        substr_bonus = 0.25
+    elif len(bl) >= 8 and bl in al:
+        substr_bonus = 0.25
+    elif inter and len(inter) >= 2:
+        substr_bonus = 0.1
+    return min(1.0, jaccard + substr_bonus)
+
+
+def _blame_line_timestamp(repo_path: Path, rel_path: str, line_no: int) -> str | None:
+    """Data/hora ISO do último commit que tocou a linha (git blame --porcelain)."""
+    if not (repo_path / ".git").exists():
+        return None
+    if not (repo_path / rel_path).exists():
+        return None
+    try:
+        raw = subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(repo_path),
+                "blame",
+                "-L",
+                f"{line_no},{line_no}",
+                "--porcelain",
+                "--",
+                rel_path,
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    for line in raw.splitlines():
+        if line.startswith("author-time "):
+            try:
+                ts = int(line.split()[1])
+                return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, IndexError):
+                return None
+    return None
+
+
+def _repo_map_from_workspace(ws: dict) -> dict[str, Path]:
+    return {
+        str(r.get("id", Path(r.get("path", "")).name)): Path(r.get("path", ""))
+        for r in ws.get("repos", [])
+        if r.get("path")
+    }
+
+
+def _primary_doc_source(c: dict) -> dict | None:
+    for kind in ("plan", "checklist", "todolist"):
+        for s in c.get("sources", []):
+            if s.get("kind") == kind and s.get("path") and s.get("line"):
+                return s
+    return None
+
+
+def _needs_temporal_inference(c: dict) -> bool:
+    return not any(c.get(f) for f in DATE_FIELDS)
+
+
+def infer_dates_from_git_blame(cands: list[dict], repo_map: dict[str, Path]) -> None:
+    """Checklists/planos sem datas: git blame na linha do markdown ([x]/[~])."""
+    for c in cands:
+        if not _needs_temporal_inference(c):
+            continue
+        if c.get("status_local") not in ("done", "partial"):
+            continue
+        src = _primary_doc_source(c)
+        if not src:
+            continue
+        repo_id = (c.get("source_repos") or [None])[0]
+        repo_path = repo_map.get(repo_id or "")
+        if not repo_path:
+            continue
+        rel_path = src["path"]
+        line_no = int(src["line"])
+        ts = _blame_line_timestamp(repo_path, rel_path, line_no)
+        if not ts:
+            continue
+        c["real_end"] = ts
+        c["real_start"] = ts  # encadeamento corrige em chain_temporal_windows_same_day
+        c["plan_end"] = ts
+        c["plan_start"] = ts
+        c["temporal_source"] = "git-blame"
+        c["sources"].append(
+            {
+                "kind": "git-blame",
+                "repo": repo_id,
+                "path": rel_path,
+                "line": line_no,
+                "committed_at": ts,
+            }
+        )
+
+
+def chain_temporal_windows_same_day(cands: list[dict]) -> None:
+    """Encadeia real_start/real_end de itens do mesmo arquivo no mesmo dia."""
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for c in cands:
+        end = _parse_dt(c.get("real_end"))
+        if not end:
+            continue
+        src = _primary_doc_source(c)
+        if not src:
+            continue
+        repo_id = (c.get("source_repos") or [""])[0]
+        key = f"{repo_id}:{src.get('path')}:{end.date().isoformat()}"
+        groups[key].append(c)
+
+    for items in groups.values():
+        if len(items) < 2:
+            # único item do dia: estimar início se ainda colapsado
+            c = items[0]
+            rs, re = _parse_dt(c.get("real_start")), _parse_dt(c.get("real_end"))
+            if rs and re and rs >= re:
+                est = c.get("estimated_minutes") or DEFAULT_ESTIMATE_MINUTES
+                c["real_start"] = _fmt_dt(re - timedelta(minutes=est))
+                c["plan_start"] = c["real_start"]
+                c["estimated_minutes"] = est
+                if c.get("temporal_source") == "git-blame":
+                    c["temporal_source"] = "git-blame-estimated"
+            continue
+
+        items.sort(key=lambda x: _parse_dt(x.get("real_end")) or datetime.min)
+        prev_end: datetime | None = None
+        for idx, c in enumerate(items):
+            end = _parse_dt(c.get("real_end"))
+            if not end:
+                continue
+            if idx == 0 or prev_end is None:
+                est = c.get("estimated_minutes") or DEFAULT_ESTIMATE_MINUTES
+                c["real_start"] = _fmt_dt(end - timedelta(minutes=est))
+                c["estimated_minutes"] = est
+                src_kind = c.get("temporal_source") or ""
+                if "blame" in src_kind:
+                    c["temporal_source"] = "git-blame-estimated" if idx == 0 else "git-blame-chain"
+                elif "inferred" in src_kind:
+                    c["temporal_source"] = "commit-inferred-estimated"
+                else:
+                    c["temporal_source"] = "estimated"
+            else:
+                c["real_start"] = _fmt_dt(prev_end)
+                src_kind = c.get("temporal_source") or ""
+                if "blame" in src_kind:
+                    c["temporal_source"] = "git-blame-chain"
+                elif "inferred" in src_kind:
+                    c["temporal_source"] = "commit-inferred-chain"
+                else:
+                    c["temporal_source"] = "chain"
+            c["plan_start"] = c["real_start"]
+            c["plan_end"] = c["real_end"]
+            prev_end = end
+
+
+def infer_dates_from_commit_similarity(
+    cands: list[dict],
+    min_score: float = COMMIT_MATCH_MIN_SCORE,
+) -> None:
+    """Fallback: associa checklist/plano sem datas ao commit de título mais parecido."""
+    commit_pool: list[dict] = []
+    for c in cands:
+        if not _has_source_kind(c, "commit"):
+            continue
+        if not c.get("real_end"):
+            continue
+        commit_pool.append(c)
+    if not commit_pool:
+        return
+
+    for c in cands:
+        if not _needs_temporal_inference(c):
+            continue
+        if not (_has_source_kind(c, "plan") or _has_source_kind(c, "checklist") or _has_source_kind(c, "todolist")):
+            continue
+        title = c.get("title") or ""
+        best: dict | None = None
+        best_score = 0.0
+        for commit in commit_pool:
+            score = _title_similarity(title, commit.get("title") or "")
+            if score > best_score:
+                best_score = score
+                best = commit
+        if not best or best_score < min_score:
+            continue
+        _merge_dates(c, best)
+        c["temporal_source"] = c.get("temporal_source") or "commit-inferred"
+        c["sources"].append(
+            {
+                "kind": "commit-inferred",
+                "match_score": round(best_score, 3),
+                "matched_title": (best.get("title") or "")[:120],
+                "committed_at": best.get("real_end"),
+            }
+        )
+
+
 def fill_null_dates_from_commit_sources(cands: list[dict]) -> None:
     """Garante que candidatos com source commit herdem timestamps dos sources se ainda null."""
     for c in cands:
@@ -915,7 +1466,11 @@ def main() -> int:
         if "branch" in scanners:
             cands.extend(scan_branches(path, rid))
 
+    repo_map = _repo_map_from_workspace(ws)
     cands = dedupe(cands)
+    infer_dates_from_git_blame(cands, repo_map)
+    chain_temporal_windows_same_day(cands)
+    infer_dates_from_commit_similarity(cands)
     fill_null_dates_from_commit_sources(cands)
     reconcile_status_for_retro(cands)
     enrich_phase_dates_from_children(cands)
