@@ -1272,6 +1272,87 @@ def nullify_real_dates_by_state(cands: list[dict]) -> None:
             c["real_end"] = None
 
 
+# Limite do content sugerido para ProjectTask (GLPI); apply pode cortar no mesmo teto
+DEFAULT_CONTENT_MAX = int(os.environ.get("GLPI_RETRO_CONTENT_MAX", "4000"))
+DEFAULT_CONTENT_MAX_SOURCES = int(os.environ.get("GLPI_RETRO_CONTENT_MAX_SOURCES", "12"))
+
+
+def _format_source_line(s: dict) -> str:
+    kind = s.get("kind") or "?"
+    repo = s.get("repo") or ""
+    path = s.get("path") or ""
+    line = s.get("line")
+    parts: list[str] = [str(kind)]
+    if repo:
+        parts.append(f"@ {repo}")
+    if path:
+        loc = path
+        if line is not None:
+            loc = f"{path}:{line}"
+        parts.append(loc)
+    elif s.get("name"):
+        parts.append(str(s["name"]))
+    elif s.get("message"):
+        msg = str(s["message"])[:80]
+        sha = ""
+        shas = s.get("shas") or []
+        if shas:
+            sha = f"{str(shas[0])[:7]} "
+        parts.append(f"{sha}{msg}")
+    elif s.get("matched_title"):
+        parts.append(f"~{s['matched_title'][:60]}")
+    if s.get("committed_at") and kind in ("commit", "git-blame", "commit-inferred"):
+        parts.append(f"({s['committed_at']})")
+    return " ".join(parts)
+
+
+def build_suggested_content(
+    c: dict,
+    *,
+    max_len: int = DEFAULT_CONTENT_MAX,
+    max_sources: int = DEFAULT_CONTENT_MAX_SOURCES,
+) -> str:
+    """Monta content da ProjectTask com hierarquia + source_repos + sources (polyrepo)."""
+    lines: list[str] = [
+        f"Hierarquia: kind={c.get('kind')} code={c.get('code') or '—'} "
+        f"parent={c.get('parent_code') or '—'}",
+    ]
+    if c.get("criterion"):
+        lines.append(f"Criterio: {c['criterion']}")
+    if c.get("temporal_source"):
+        lines.append(f"temporal_source: {c['temporal_source']}")
+
+    repos = c.get("source_repos") or []
+    if repos:
+        lines.append(f"Repos: {', '.join(str(r) for r in repos)}")
+    else:
+        lines.append("Repos: —")
+
+    sources = list(c.get("sources") or [])
+    # dedupe linhas idênticas preservando ordem
+    seen: set[str] = set()
+    unique_sources: list[dict] = []
+    for s in sources:
+        key = _format_source_line(s)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_sources.append(s)
+
+    lines.append("Fontes:")
+    shown = unique_sources[: max(0, max_sources)]
+    for s in shown:
+        lines.append(f"- {_format_source_line(s)}")
+    omitted = len(unique_sources) - len(shown)
+    if omitted > 0:
+        lines.append(f"- … +{omitted} fonte(s)")
+
+    text = "\n".join(lines)
+    if max_len > 0 and len(text) > max_len:
+        text = text[: max_len - 20].rstrip() + "\n… [truncado]"
+    return text
+
+
 def enrich_phase_dates_from_children(cands: list[dict]) -> None:
     """Fase S: datas = min(real_start)/max(real_end) dos filhos; status agregado."""
     by_code = { (c.get("code") or "").upper(): c for c in cands if c.get("code") }
@@ -1639,12 +1720,7 @@ def main() -> int:
             "real_start": c.get("real_start"),
             "real_end": c.get("real_end"),
             "temporal_source": c.get("temporal_source"),
-            "content": (
-                f"Hierarquia: kind={c.get('kind')} code={c.get('code')} "
-                f"parent={c.get('parent_code')}\n"
-                + (f"Criterio: {c.get('criterion')}\n" if c.get("criterion") else "")
-                + f"Fonte: {c['sources'][0]}"
-            ),
+            "content": build_suggested_content(c),
         }
 
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d_%H%M")

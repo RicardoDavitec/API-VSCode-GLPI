@@ -27,6 +27,20 @@ Saída: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`).
   - `gep1` (não iniciado) → `real_start` e `real_end` = `null` (mesma exceção)
 - `gep7` (feito) mantém as datas inferidas ou confirmadas.
 
+## Conteúdo sugerido (GLPI)
+
+`suggested_glpi.content` traz procedência polyrepo:
+
+```text
+Hierarquia: kind=… code=… parent=…
+Repos: Bot_Pan, Bot_Pan_Cursor
+Fontes:
+- plan docs/…/PLANO_….md:110
+- commit @ Bot_Pan abc1234 …
+```
+
+Limites: `GLPI_RETRO_CONTENT_MAX` (4000) · `GLPI_RETRO_CONTENT_MAX_SOURCES` (12).
+
 ## Pós-scan (apply pai→filho)
 
 ```bash

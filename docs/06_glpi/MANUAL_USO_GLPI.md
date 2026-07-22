@@ -405,6 +405,8 @@ Campos: `plan_start`, `plan_end`, `real_start`, `real_end`, `temporal_source` (n
 
 **Datas × GEP:** após reconciliar, `gep1` zera `real_start`/`real_end`; `gep3` zera `real_end`. Não altera timestamps confirmados (`temporal_source` = `plan`, `checklist-comment`, `correlated`).
 
+**Conteúdo (polyrepo):** `suggested_glpi.content` inclui `Repos:` (ids do `workspace.yaml`) e lista `Fontes:` (kind, path, repo). Limites: `GLPI_RETRO_CONTENT_MAX` (default 4000) e `GLPI_RETRO_CONTENT_MAX_SOURCES` (default 12); o `retro-apply` usa o mesmo teto ao enviar `--content`.
+
 ```bash
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/glpi retro-scan --workspace=.glpi/workspace.yaml

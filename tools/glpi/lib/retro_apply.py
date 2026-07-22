@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+# Alinhado ao teto do retro_scan (GLPI_RETRO_CONTENT_MAX)
+CONTENT_MAX = int(os.environ.get("GLPI_RETRO_CONTENT_MAX", "4000"))
 
 
 def sort_for_apply(cands: list[dict]) -> list[dict]:
@@ -50,7 +54,7 @@ def build_upsert_args(c: dict, apply: bool) -> list[str] | None:
         args.append(f"--state={state}")
     content = g.get("content")
     if content:
-        args.append(f"--content={content[:500]}")
+        args.append(f"--content={content[:CONTENT_MAX]}")
     for flag, key in (
         ("--plan-start", "plan_start"),
         ("--plan-end", "plan_end"),
