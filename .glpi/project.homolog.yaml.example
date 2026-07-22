@@ -1,0 +1,9 @@
+# Opcional — IDs de Ticket/Project apenas em homologacao
+# Usado automaticamente quando GLPI_ENV=homolog (ou --env=homolog / --homolog)
+# Se ausente, o CLI tenta o bloco "homolog:" em project.yaml; senao usa os IDs de producao.
+
+key: meu-produto-hml
+# ticket_id: 0
+# project_id: 0
+phase_template: corporate-phases
+followup_private: false

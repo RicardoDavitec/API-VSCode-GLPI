@@ -1,17 +1,27 @@
 # Preset api-vscode-glpi — triangulo VSCode/Cursor ↔ Git ↔ GLPI
-# Exemplificacao PMF Franca (suporte.franca.sp.gov.br); adapte api_url ao seu GLPI.
+# Exemplificacao PMF Franca; adapte URLs ao seu GLPI.
 
 preset: api-vscode-glpi
 label: "API-VSCode-GLPI (PMF Franca — exemplo)"
+environment: prod   # default; override: glpi --env=homolog | GLPI_ENV=homolog
 
 glpi:
   api_url: "https://suporte.franca.sp.gov.br/apirest.php"
   ui_url: "https://suporte.franca.sp.gov.br"
   require_app_token: true
 
+environments:
+  prod:
+    api_url: "https://suporte.franca.sp.gov.br/apirest.php"
+    ui_url: "https://suporte.franca.sp.gov.br"
+  homolog:
+    api_url: "https://suporte-homolog.franca.sp.gov.br/apirest.php"
+    ui_url: "https://suporte-homolog.franca.sp.gov.br"
+
 secrets:
-  file: "~/.secrets/GLPI-tokens.txt"
-  format: pmf
+  file: "~/.secrets/glpi.env"
+  format: dotenv
+  # legado: "~/.secrets/GLPI-tokens.txt" + format: pmf
 
 states:
   map_file: ".glpi/maps/states.json"
@@ -20,7 +30,3 @@ states:
 workflow:
   hierarchy: s_p
   phase_template: corporate-phases
-
-# Exemplo PMF (nao usar como default obrigatorio — preencher no project.yaml do produto):
-# ticket_id: 10554  (Samu Operacional)
-# project_id: 72      (Desenvolvimento PMF SIGS-Samu)

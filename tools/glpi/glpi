@@ -10,7 +10,13 @@ source "${SCRIPT_DIR}/lib/task.sh"
 
 usage() {
   cat <<'EOF'
-Uso: glpi <comando> [args]
+Uso: glpi [--env=prod|homolog] [--homolog] <comando> [args]
+
+Ambiente:
+  --env=prod|homolog       Seleciona URL (GLPI_API_URL_* em ~/.secrets/glpi.env)
+  --homolog                Atalho para --env=homolog
+  GLPI_ENV                 Mesmo efeito via variavel de ambiente
+  Secrets preferidos: ~/.secrets/glpi.env (dotenv); legado: GLPI-tokens.txt
 
 Comandos:
   auth                     Inicia sessao e imprime session_token (teste)
@@ -84,6 +90,8 @@ Exemplos:
   ./tools/glpi/glpi retro-apply --from=docs/06_glpi/retro-scans/ULTIMO.json
   ./tools/glpi/glpi states discover --apply
   ./tools/glpi/glpi document attach --file=docs/05_progresso/geral/SESSAO_....md --ticket --apply
+  ./tools/glpi/glpi --env=homolog auth
+  ./tools/glpi/glpi --homolog task upsert --code=S4 --name="teste HML" --apply
   ./tools/glpi/bin/glpi-retro-apply --from=... --codes=S4,S4.P5   # wrapper direto
 EOF
 }
@@ -150,7 +158,7 @@ cmd_project_get() {
 cmd_project_tasks() {
   local pid state_file resp
   pid="$(resolve_project_id "${1:-}")"
-  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  state_file="$(glpi_state_file "$pid")"
   glpi_init_session
   trap 'glpi_kill_session' EXIT
 
@@ -237,7 +245,7 @@ cmd_seed_phases() {
   trap 'glpi_kill_session' EXIT
 
   local state_file names_json codes_json
-  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  state_file="$(glpi_state_file "$pid")"
   names_json='[]'
   codes_json='[]'
   if [[ -f "$state_file" ]]; then
@@ -372,7 +380,7 @@ resolve_task_parent_id() {
         echo ""
         return 0
       fi
-      die "pai --parent-code=${TASK_PARENT_CODE} nao encontrado no state local (.glpi/state-project-${pid}.json). Rode seed-phases --template=samu-s-phases --apply antes."
+      die "pai --parent-code=${TASK_PARENT_CODE} nao encontrado no state local ($(glpi_state_file "$pid")). Rode seed-phases --apply antes."
     fi
     echo "$found"
     return 0
@@ -528,7 +536,7 @@ task_do_create() {
   if [[ -n "$new_id" && "$new_id" != "null" && "$new_id" != "false" ]]; then
     append_task_to_state "$pid" "$new_id" "$(echo "$input" | jq -r '.name')" \
       "${TASK_CODE}" "${TASK_KIND}" "${TASK_PARENT_CODE}" "${parent_resolved}"
-    echo "Estado local atualizado (.glpi/state-project-${pid}.json)"
+    echo "Estado local atualizado ($(glpi_state_file "$pid"))"
     TASK_LAST_ID="$new_id"
   fi
 }
@@ -677,7 +685,7 @@ EOF
     local pid
     pid="$(resolve_project_id "")"
     items_id="$(find_task_id_by_code "$code" "$pid" || true)"
-    [[ -n "$items_id" ]] || die "ProjectTask code=$code nao encontrada em .glpi/state-project-${pid}.json"
+    [[ -n "$items_id" ]] || die "ProjectTask code=$code nao encontrada em $(glpi_state_file "$pid")"
     itemtype="ProjectTask"
   fi
 
@@ -822,12 +830,14 @@ cmd_states_discover() {
   [[ -n "$out" ]] && extra+=(--out "$out")
   [[ -n "${GLPI_SECRETS_FILE:-}" ]] && extra+=(--secrets-file "$GLPI_SECRETS_FILE")
   [[ -n "${GLPI_SECRETS_FORMAT:-}" ]] && extra+=(--secrets-format "$GLPI_SECRETS_FORMAT")
+  [[ -n "${GLPI_ENV:-}" ]] && extra+=(--env "$GLPI_ENV")
   [[ -n "${GLPI_API_URL:-}" ]] && extra+=(--api-url "$GLPI_API_URL")
   [[ -n "${GLPI_USER_TOKEN:-}" ]] && extra+=(--user-token "$GLPI_USER_TOKEN")
   [[ -n "${GLPI_APP_TOKEN:-}" ]] && extra+=(--app-token "$GLPI_APP_TOKEN")
   load_credentials
-  extra+=(--api-url "$GLPI_API_URL" --user-token "$GLPI_USER_TOKEN")
+  extra+=(--api-url "$GLPI_API_URL" --user-token "$GLPI_USER_TOKEN" --env "${GLPI_ENV:-prod}")
   [[ -n "${GLPI_APP_TOKEN:-}" ]] && extra+=(--app-token "$GLPI_APP_TOKEN")
+  [[ -n "${GLPI_SECRETS_FORMAT:-}" ]] || extra+=(--secrets-format dotenv)
   [[ "$apply" -eq 1 ]] && extra+=(--apply)
   python3 "${SCRIPT_DIR}/lib/states_discover.py" "${extra[@]}"
 }
@@ -876,7 +886,38 @@ cmd_retro_apply() {
   python3 "${SCRIPT_DIR}/lib/retro_apply.py" --from="$from" --glpi-bin="${SCRIPT_DIR}/glpi" "${extra[@]}"
 }
 
+parse_global_env_flags() {
+  # Consome --env= / --homolog do inicio de "$@"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --env=*)
+        GLPI_ENV="$(normalize_glpi_env_name "${1#--env=}")"
+        export GLPI_ENV
+        shift
+        ;;
+      --homolog|--hml)
+        GLPI_ENV="homolog"
+        export GLPI_ENV
+        shift
+        ;;
+      --env)
+        [[ $# -ge 2 ]] || die "--env exige valor prod|homolog"
+        GLPI_ENV="$(normalize_glpi_env_name "$2")"
+        export GLPI_ENV
+        shift 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  # reexport remaining as positional via global array? caller uses set --
+  GLPI_REMAINING_ARGS=("$@")
+}
+
 main() {
+  parse_global_env_flags "$@"
+  set -- "${GLPI_REMAINING_ARGS[@]}"
   local cmd="${1:-}"
   shift || true
   case "$cmd" in

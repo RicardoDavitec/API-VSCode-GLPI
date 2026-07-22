@@ -10,17 +10,31 @@ GLPI_SESSION_TOKEN="${GLPI_SESSION_TOKEN:-}"
 GLPI_API_URL="${GLPI_API_URL:-}"
 GLPI_USER_TOKEN="${GLPI_USER_TOKEN:-}"
 GLPI_APP_TOKEN="${GLPI_APP_TOKEN:-}"
-GLPI_SECRETS_FILE="${GLPI_SECRETS_FILE:-${HOME}/.secrets/GLPI-tokens.txt}"
+# Preferir dotenv (~/.secrets/glpi.env); fallback legado GLPI-tokens.txt
+if [[ -z "${GLPI_SECRETS_FILE:-}" ]]; then
+  if [[ -f "${HOME}/.secrets/glpi.env" ]]; then
+    GLPI_SECRETS_FILE="${HOME}/.secrets/glpi.env"
+  else
+    GLPI_SECRETS_FILE="${HOME}/.secrets/GLPI-tokens.txt"
+  fi
+fi
 GLPI_PROJECT_FILE="${GLPI_PROJECT_FILE:-${REPO_ROOT}/.glpi/project.yaml}"
 GLPI_INSTANCE_FILE="${GLPI_INSTANCE_FILE:-${REPO_ROOT}/.glpi/instance.yaml}"
 GLPI_REQUIRE_APP_TOKEN="${GLPI_REQUIRE_APP_TOKEN:-}"
 GLPI_SECRETS_FORMAT="${GLPI_SECRETS_FORMAT:-}"
+# prod | homolog — CLI: --env=homolog | --homolog | export GLPI_ENV=homolog
+GLPI_ENV="${GLPI_ENV:-}"
 
 GLPI_CFG_TICKET_ID=""
 GLPI_CFG_PROJECT_ID=""
 GLPI_CFG_KEY=""
 GLPI_CFG_PHASE_TEMPLATE=""
 GLPI_CFG_PRESET="api-vscode-glpi"
+GLPI_API_URL_PROD=""
+GLPI_API_URL_HOMOLOG=""
+GLPI_UI_URL=""
+GLPI_USER_TOKEN_HOMOLOG="${GLPI_USER_TOKEN_HOMOLOG:-}"
+GLPI_APP_TOKEN_HOMOLOG="${GLPI_APP_TOKEN_HOMOLOG:-}"
 
 die() {
   echo "erro: $*" >&2
@@ -34,6 +48,48 @@ need_cmd() {
 expand_path() {
   local p="${1/#\~/$HOME}"
   echo "$p"
+}
+
+normalize_glpi_env_name() {
+  local e
+  e="$(echo "${1:-prod}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  case "$e" in
+    hml|homo|homologacao|homologação|homolog) echo "homolog" ;;
+    prod|production|"") echo "prod" ;;
+    *) echo "$e" ;;
+  esac
+}
+
+ensure_apirest_url() {
+  local u="${1:-}"
+  u="${u%/}"
+  [[ -z "$u" ]] && { echo ""; return 0; }
+  if [[ "$u" != */apirest.php ]]; then
+    u="${u}/apirest.php"
+  fi
+  echo "$u"
+}
+
+# State local separado em homolog para nao misturar IDs com producao
+glpi_state_file() {
+  local pid="${1:-}"
+  local suffix=""
+  [[ "$(normalize_glpi_env_name "${GLPI_ENV:-prod}")" == "homolog" ]] && suffix=".homolog"
+  echo "${REPO_ROOT}/.glpi/state-project-${pid}${suffix}.json"
+}
+
+glpi_env_banner() {
+  local env_name api
+  env_name="$(normalize_glpi_env_name "${GLPI_ENV:-prod}")"
+  api="${GLPI_API_URL:-?}"
+  if [[ "$env_name" == "homolog" ]]; then
+    echo "╔══════════════════════════════════════════════════════════╗" >&2
+    echo "║  GLPI ENV: HOMOLOG  (escritas NAO vao para producao)    ║" >&2
+    echo "║  API: ${api}" >&2
+    echo "╚══════════════════════════════════════════════════════════╝" >&2
+  else
+    echo "[glpi-env] prod → ${api}" >&2
+  fi
 }
 
 # Extrai valor simples de YAML chave: valor (sem parser completo)
@@ -61,7 +117,7 @@ yaml_get_nested() {
 }
 
 load_instance_config() {
-  local preset_dir secrets_file
+  local secrets_file
   if [[ ! -f "${GLPI_INSTANCE_FILE}" ]]; then
     GLPI_CFG_PRESET="${GLPI_CFG_PRESET:-api-vscode-glpi}"
     GLPI_CFG_PHASE_TEMPLATE="${GLPI_CFG_PHASE_TEMPLATE:-corporate-phases}"
@@ -71,7 +127,7 @@ load_instance_config() {
   GLPI_CFG_PRESET="$(yaml_get "${GLPI_INSTANCE_FILE}" preset || true)"
   GLPI_CFG_PRESET="${GLPI_CFG_PRESET:-api-vscode-glpi}"
 
-  local api_url ui_url req_app secrets_fmt map_file phase_tpl
+  local api_url ui_url req_app secrets_fmt map_file phase_tpl env_default api_prod api_hml
   api_url="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" glpi api_url || true)"
   ui_url="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" glpi ui_url || true)"
   req_app="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" glpi require_app_token || true)"
@@ -79,8 +135,42 @@ load_instance_config() {
   secrets_file="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" secrets file || true)"
   map_file="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" states map_file || true)"
   phase_tpl="$(yaml_get_nested "${GLPI_INSTANCE_FILE}" workflow phase_template || true)"
+  env_default="$(yaml_get "${GLPI_INSTANCE_FILE}" environment || true)"
 
-  [[ -n "$api_url" && -z "${GLPI_API_URL}" ]] && GLPI_API_URL="$api_url"
+  api_prod="$(awk '
+    BEGIN{sec=""}
+    /^environments:/ {top=1; next}
+    top && /^[^ \t#]/ {top=0}
+    top && /^[ \t]*prod:[ \t]*$/ {sec="prod"; next}
+    top && /^[ \t]*homolog:[ \t]*$/ {sec="homolog"; next}
+    top && sec!="" && /^[ \t]+[a-z_]+:/ {
+      key=$1; sub(/:/,"",key); gsub(/^[ \t]+|[ \t]+$/,"",key)
+      val=$0; sub(/^[ \t]*[^:]+:[ \t]*/,"",val); gsub(/["'\'']/,"",val); gsub(/^[ \t]+|[ \t]+$/,"",val)
+      if (sec=="prod" && key=="api_url") print val
+    }
+  ' "${GLPI_INSTANCE_FILE}" | head -n1)"
+  api_hml="$(awk '
+    BEGIN{sec=""}
+    /^environments:/ {top=1; next}
+    top && /^[^ \t#]/ {top=0}
+    top && /^[ \t]*prod:[ \t]*$/ {sec="prod"; next}
+    top && /^[ \t]*homolog:[ \t]*$/ {sec="homolog"; next}
+    top && sec!="" && /^[ \t]+[a-z_]+:/ {
+      key=$1; sub(/:/,"",key); gsub(/^[ \t]+|[ \t]+$/,"",key)
+      val=$0; sub(/^[ \t]*[^:]+:[ \t]*/,"",val); gsub(/["'\'']/,"",val); gsub(/^[ \t]+|[ \t]+$/,"",val)
+      if (sec=="homolog" && key=="api_url") print val
+    }
+  ' "${GLPI_INSTANCE_FILE}" | head -n1)"
+
+  [[ -n "$api_prod" ]] && GLPI_API_URL_PROD="$(ensure_apirest_url "$api_prod")"
+  [[ -n "$api_hml" ]] && GLPI_API_URL_HOMOLOG="$(ensure_apirest_url "$api_hml")"
+  [[ -n "$api_url" && -z "${GLPI_API_URL_PROD}" ]] && GLPI_API_URL_PROD="$(ensure_apirest_url "$api_url")"
+  [[ -n "$ui_url" ]] && GLPI_UI_URL="$ui_url"
+
+  if [[ -z "${GLPI_ENV}" && -n "$env_default" ]]; then
+    GLPI_ENV="$(normalize_glpi_env_name "$env_default")"
+  fi
+
   [[ -n "$secrets_file" ]] && GLPI_SECRETS_FILE="$(expand_path "$secrets_file")"
   [[ -n "$secrets_fmt" ]] && GLPI_SECRETS_FORMAT="$secrets_fmt"
   [[ -n "$map_file" ]] && GLPI_STATES_FILE="${REPO_ROOT}/$(echo "$map_file" | sed 's|^\./||')"
@@ -96,13 +186,28 @@ load_instance_config() {
 
 load_project_config() {
   load_instance_config
-  if [[ -f "${GLPI_PROJECT_FILE}" ]]; then
-    GLPI_CFG_TICKET_ID="$(yaml_get "${GLPI_PROJECT_FILE}" ticket_id || true)"
-    GLPI_CFG_PROJECT_ID="$(yaml_get "${GLPI_PROJECT_FILE}" project_id || true)"
-    GLPI_CFG_KEY="$(yaml_get "${GLPI_PROJECT_FILE}" key || true)"
+  # Homolog: preferir project.homolog.yaml se existir
+  local env_name pf
+  env_name="$(normalize_glpi_env_name "${GLPI_ENV:-prod}")"
+  pf="${GLPI_PROJECT_FILE}"
+  if [[ "$env_name" == "homolog" && -f "${REPO_ROOT}/.glpi/project.homolog.yaml" ]]; then
+    pf="${REPO_ROOT}/.glpi/project.homolog.yaml"
+  fi
+  if [[ -f "$pf" ]]; then
+    GLPI_CFG_TICKET_ID="$(yaml_get "$pf" ticket_id || true)"
+    GLPI_CFG_PROJECT_ID="$(yaml_get "$pf" project_id || true)"
+    GLPI_CFG_KEY="$(yaml_get "$pf" key || true)"
     local pt
-    pt="$(yaml_get "${GLPI_PROJECT_FILE}" phase_template || true)"
+    pt="$(yaml_get "$pf" phase_template || true)"
     [[ -n "$pt" ]] && GLPI_CFG_PHASE_TEMPLATE="$pt"
+    # Overrides opcionales: homolog.project_id / homolog.ticket_id no project.yaml principal
+    if [[ "$env_name" == "homolog" && "$pf" == "${GLPI_PROJECT_FILE}" ]]; then
+      local hp ht
+      hp="$(yaml_get_nested "$pf" homolog project_id || true)"
+      ht="$(yaml_get_nested "$pf" homolog ticket_id || true)"
+      [[ -n "$hp" ]] && GLPI_CFG_PROJECT_ID="$hp"
+      [[ -n "$ht" ]] && GLPI_CFG_TICKET_ID="$ht"
+    fi
   fi
   GLPI_CFG_TICKET_ID="${GLPI_CFG_TICKET_ID:-}"
   GLPI_CFG_PROJECT_ID="${GLPI_CFG_PROJECT_ID:-}"
@@ -110,21 +215,55 @@ load_project_config() {
   GLPI_CFG_PHASE_TEMPLATE="${GLPI_CFG_PHASE_TEMPLATE:-corporate-phases}"
 }
 
-# Le secrets — formatos: pmf | generic | env (env = so variaveis, ignora arquivo parcial)
+# Le secrets — formatos: dotenv|pmf|generic|env
 load_secrets_file() {
   local file="${1:-$GLPI_SECRETS_FILE}"
   [[ -f "$file" ]] || return 1
 
-  local line personal="" group="" url="" user="" app="" fmt="${GLPI_SECRETS_FORMAT:-pmf}"
+  local line personal="" group="" url="" url_prod="" url_hml="" user="" app="" fmt="${GLPI_SECRETS_FORMAT:-}"
+  local base
+  base="$(basename "$file")"
+
+  # Auto-detect formato
+  if [[ -z "$fmt" ]]; then
+    if [[ "$base" == *.env || "$base" == "glpi.env" ]]; then
+      fmt="dotenv"
+    else
+      fmt="pmf"
+    fi
+  fi
+  case "$fmt" in
+    dotenv|envfile) fmt="dotenv" ;;
+  esac
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line//$'\r'/}"
     [[ -z "$line" || "$line" =~ ^# ]] && continue
 
     case "$fmt" in
+      dotenv)
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+          local k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+          v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+          case "$k" in
+            GLPI_USER_TOKEN|USER_TOKEN) user="$(echo -n "$v" | tr -d '[:space:]')" ;;
+            GLPI_APP_TOKEN|APP_TOKEN) app="$(echo -n "$v" | tr -d '[:space:]')" ;;
+            GLPI_USER_TOKEN_HOMOLOG) GLPI_USER_TOKEN_HOMOLOG="$(echo -n "$v" | tr -d '[:space:]')" ;;
+            GLPI_APP_TOKEN_HOMOLOG) GLPI_APP_TOKEN_HOMOLOG="$(echo -n "$v" | tr -d '[:space:]')" ;;
+            GLPI_API_URL_PROD) url_prod="$(ensure_apirest_url "$v")" ;;
+            GLPI_API_URL_HOMOLOG) url_hml="$(ensure_apirest_url "$v")" ;;
+            GLPI_API_URL|API_URL) url="$(ensure_apirest_url "$v")" ;;
+            GLPI_ENV_DEFAULT)
+              if [[ -z "${GLPI_ENV}" ]]; then
+                GLPI_ENV="$(normalize_glpi_env_name "$v")"
+              fi
+              ;;
+          esac
+        fi
+        ;;
       generic)
         if [[ "$line" =~ ^[Aa][Pp][Ii]_?[Uu][Rr][Ll]:[[:space:]]*(https?://[^[:space:]]+) ]]; then
-          url="${BASH_REMATCH[1]}"
+          url="$(ensure_apirest_url "${BASH_REMATCH[1]}")"
         elif [[ "$line" =~ ^[Uu][Ss][Ee][Rr]_?[Tt][Oo][Kk][Ee][Nn]:[[:space:]]*(.+) ]]; then
           user="$(echo -n "${BASH_REMATCH[1]}" | tr -d '[:space:]')"
         elif [[ "$line" =~ ^[Aa][Pp][Pp]_?[Tt][Oo][Kk][Ee][Nn]:[[:space:]]*(.+) ]]; then
@@ -134,8 +273,13 @@ load_secrets_file() {
       env)
         ;;
       pmf|*)
-        if [[ "$line" =~ [Uu][Rr][Ll].*[Aa][Pp][Ii].*:[[:space:]]*(https?://[^[:space:]]+) ]]; then
-          url="${BASH_REMATCH[1]}"
+        if [[ "$line" =~ [Uu][Rr][Ll].*[Aa][Pp][Ii].*[Hh][Oo][Mm][Oo][Ll] ]]; then
+          if [[ "$line" =~ (https?://[^[:space:]]+) ]]; then
+            url_hml="$(ensure_apirest_url "${BASH_REMATCH[1]}")"
+          fi
+        elif [[ "$line" =~ [Uu][Rr][Ll].*[Aa][Pp][Ii].*:[[:space:]]*(https?://[^[:space:]]+) ]]; then
+          url_prod="$(ensure_apirest_url "${BASH_REMATCH[1]}")"
+          url="$url_prod"
         elif [[ "$line" =~ [Pp]essoal[[:space:]]+API-GLPI:[[:space:]]*(.+) ]]; then
           personal="$(echo -n "${BASH_REMATCH[1]}" | tr -d '[:space:]')"
         elif [[ "$line" =~ [Gg]rupo[[:space:]]+API-GLPI:[[:space:]]*(.+) ]]; then
@@ -149,7 +293,9 @@ load_secrets_file() {
     esac
   done <"$file"
 
-  [[ -z "${GLPI_API_URL}" && -n "$url" ]] && GLPI_API_URL="$url"
+  [[ -n "$url_prod" ]] && GLPI_API_URL_PROD="$url_prod"
+  [[ -n "$url_hml" ]] && GLPI_API_URL_HOMOLOG="$url_hml"
+  [[ -n "$url" && -z "${GLPI_API_URL_PROD}" ]] && GLPI_API_URL_PROD="$url"
 
   if [[ -z "${GLPI_USER_TOKEN}" ]]; then
     if [[ -n "$personal" ]]; then
@@ -170,11 +316,38 @@ load_secrets_file() {
 
 load_credentials() {
   load_project_config
-  if [[ "${GLPI_SECRETS_FORMAT:-env}" != "env" ]]; then
+  if [[ "${GLPI_SECRETS_FORMAT:-}" != "env" ]]; then
     load_secrets_file || true
   fi
 
+  GLPI_ENV="$(normalize_glpi_env_name "${GLPI_ENV:-prod}")"
+
+  # Tokens especificos de homolog (se existirem)
+  if [[ "${GLPI_ENV}" == "homolog" ]]; then
+    [[ -n "${GLPI_USER_TOKEN_HOMOLOG:-}" ]] && GLPI_USER_TOKEN="$GLPI_USER_TOKEN_HOMOLOG"
+    [[ -n "${GLPI_APP_TOKEN_HOMOLOG:-}" ]] && GLPI_APP_TOKEN="$GLPI_APP_TOKEN_HOMOLOG"
+  fi
+
+  # Seleciona URL conforme ambiente
+  if [[ "${GLPI_ENV}" == "homolog" ]]; then
+    if [[ -n "${GLPI_API_URL_HOMOLOG}" ]]; then
+      GLPI_API_URL="$(ensure_apirest_url "$GLPI_API_URL_HOMOLOG")"
+    elif [[ -n "${GLPI_API_URL}" && "${GLPI_API_URL}" == *homolog* ]]; then
+      GLPI_API_URL="$(ensure_apirest_url "$GLPI_API_URL")"
+    else
+      die "GLPI_API_URL_HOMOLOG nao definido. Configure em ~/.secrets/glpi.env ou URL-API Homologacao no legado"
+    fi
+  else
+    if [[ -z "${GLPI_API_URL}" || "${GLPI_API_URL}" == *homolog* ]]; then
+      if [[ -n "${GLPI_API_URL_PROD}" ]]; then
+        GLPI_API_URL="$(ensure_apirest_url "$GLPI_API_URL_PROD")"
+      fi
+    fi
+    GLPI_API_URL="$(ensure_apirest_url "${GLPI_API_URL}")"
+  fi
+
   GLPI_API_URL="${GLPI_API_URL%/}"
+  glpi_env_banner
 
   [[ -n "${GLPI_USER_TOKEN}" ]] || die \
     "GLPI_USER_TOKEN nao definido. Exporte GLPI_USER_TOKEN ou configure secrets em ${GLPI_SECRETS_FILE}"
@@ -187,12 +360,16 @@ load_credentials() {
       req="1"
     fi
   fi
+  # Sem App-Token: limpa o valor carregado do secrets (initSession nao envia o header)
+  if [[ "$req" == "0" ]]; then
+    GLPI_APP_TOKEN=""
+  fi
   if [[ "$req" == "1" && -z "${GLPI_APP_TOKEN}" ]]; then
-    die "GLPI_APP_TOKEN obrigatorio nesta instancia. Configure Grupo/APP_TOKEN em ${GLPI_SECRETS_FILE} ou require_app_token: false em .glpi/instance.yaml"
+    die "GLPI_APP_TOKEN obrigatorio nesta instancia. Em homolog, registre o cliente API ou use GLPI_APP_TOKEN_HOMOLOG / GLPI_REQUIRE_APP_TOKEN=0"
   fi
 
   [[ -n "${GLPI_API_URL}" ]] || die \
-    "GLPI_API_URL nao definido. Configure URL-API/API_URL em ${GLPI_SECRETS_FILE} ou glpi.api_url em ${GLPI_INSTANCE_FILE}"
+    "GLPI_API_URL nao definido. Configure URL-API em ${GLPI_SECRETS_FILE} ou glpi.api_url em ${GLPI_INSTANCE_FILE}"
 }
 
 glpi_curl_headers_session() {

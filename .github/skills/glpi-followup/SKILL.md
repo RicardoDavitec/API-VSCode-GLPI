@@ -10,7 +10,8 @@ Registra acompanhamento no chamado GLPI via CLI **deste** repositório.
 ## Pre-requisitos
 
 - `curl`, `jq`
-- Secrets (`~/.secrets/GLPI-tokens.txt` ou variáveis `GLPI_*`)
+- Secrets (`~/.secrets/glpi.env` ou legado `GLPI-tokens.txt`; variáveis `GLPI_*`)
+- Homolog: `./tools/glpi/glpi --env=homolog …` (banner HOMOLOG; nao grava em producao)
 - `.glpi/project.yaml` com `ticket_id` válido
 - `.glpi/instance.yaml` (preset `api-vscode-glpi` na equipe PMF)
 

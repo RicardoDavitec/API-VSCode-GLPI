@@ -11,8 +11,8 @@ KEY=""
 TICKET=""
 PROJECT=""
 GLPI_URL=""
-SECRETS_FILE="${HOME}/.secrets/GLPI-tokens.txt"
-SECRETS_FORMAT="pmf"
+SECRETS_FILE="${HOME}/.secrets/glpi.env"
+SECRETS_FORMAT="dotenv"
 NON_INTERACTIVE=0
 SKIP_BOOTSTRAP=0
 SKIP_AUTH=0
@@ -36,8 +36,8 @@ Opcoes:
   --ticket=ID                ticket_id GLPI (0 = preencher depois)
   --project=ID               project_id GLPI (0 = preencher depois)
   --glpi-url=URL             base API (ex.: https://host/apirest.php)
-  --secrets-file=PATH        default: ~/.secrets/GLPI-tokens.txt
-  --secrets-format=pmf|generic|env
+  --secrets-file=PATH        default: ~/.secrets/glpi.env
+  --secrets-format=dotenv|pmf|generic|env
   --force                    sobrescreve tools/skills/docs no bootstrap
   --non-interactive          sem prompts (requer --target)
   --yes                      aceitar defaults / confirmar --apply automaticamente

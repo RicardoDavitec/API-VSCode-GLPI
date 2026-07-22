@@ -7,7 +7,12 @@ location_hint: ""
 phase_template: corporate-phases
 followup_private: false
 
-# Exemplo PMF Franca (equipe interna):
+# Homologacao (IDs podem diferir da producao). Alternativa: .glpi/project.homolog.yaml
+homolog:
+  # ticket_id: 0
+  # project_id: 0
+
+# Exemplo PMF Franca (equipe interna — producao):
 # entity_hint: "Prefeitura de Franca"
 # ticket_id: 10554
 # project_id: 72

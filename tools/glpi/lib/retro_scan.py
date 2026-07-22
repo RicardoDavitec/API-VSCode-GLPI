@@ -1646,7 +1646,10 @@ def fill_null_dates_from_commit_sources(cands: list[dict]) -> None:
 def load_existing_state(repo_root: Path, project_id: str) -> tuple[set[str], set[str]]:
     names: set[str] = set()
     codes: set[str] = set()
-    sf = repo_root / ".glpi" / f"state-project-{project_id}.json"
+    suffix = ".homolog" if (os.environ.get("GLPI_ENV") or "prod").lower() in (
+        "homolog", "hml", "homo", "homologacao", "homologação",
+    ) else ""
+    sf = repo_root / ".glpi" / f"state-project-{project_id}{suffix}.json"
     if sf.exists():
         data = json.loads(sf.read_text(encoding="utf-8"))
         for t in data.get("tasks", []):

@@ -12,7 +12,7 @@ Repositório **fonte** para integração **GLPI** com qualquer instância compat
 **Exemplificação:** equipe PMF Franca — [suporte.franca.sp.gov.br](https://suporte.franca.sp.gov.br/front/login.php).
 
 > Manual em produtos: [`docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md`](docs/06_glpi/MANUAL_INTEGRACAO_GLPI.md)  
-> Secrets: `~/.secrets/GLPI-tokens.txt` — **nunca** neste repositório.
+> Secrets: `~/.secrets/glpi.env` (preferido) ou legado `GLPI-tokens.txt` — **nunca** neste repositório. Homolog: `glpi --env=homolog` → `suporte-homolog.franca.sp.gov.br`.
 
 ### Instalação rápida (assistentes)
 

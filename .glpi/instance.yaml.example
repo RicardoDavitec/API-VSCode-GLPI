@@ -1,21 +1,25 @@
-# Copiar para instance.yaml no produto (sem tokens)
-# Preset default deste kit: api-vscode-glpi (triangulo VSCode/Git/GLPI — exemplo PMF Franca)
+# Instancia GLPI do produto (copiar para .glpi/instance.yaml — nao versionar se tiver URL interna sensivel)
 
 preset: api-vscode-glpi
+environment: prod
 
 glpi:
-  api_url: ""                    # ex.: https://suporte.franca.sp.gov.br/apirest.php
-  ui_url: ""                     # ex.: https://suporte.franca.sp.gov.br (links no wizard)
-  require_app_token: true        # false se a instancia nao exige App-Token
+  api_url: "https://suporte.franca.sp.gov.br/apirest.php"
+  ui_url: "https://suporte.franca.sp.gov.br"
+  require_app_token: true
+
+environments:
+  prod:
+    api_url: "https://suporte.franca.sp.gov.br/apirest.php"
+  homolog:
+    api_url: "https://suporte-homolog.franca.sp.gov.br/apirest.php"
 
 secrets:
-  file: "~/.secrets/GLPI-tokens.txt"
-  format: pmf                    # pmf | generic | env
+  file: "~/.secrets/glpi.env"
+  format: dotenv
 
 states:
   map_file: ".glpi/maps/states.json"
-  auto_discover: true            # install-glpi / glpi states discover
 
 workflow:
-  hierarchy: s_p                 # S=phase pai, P=item filho
   phase_template: corporate-phases

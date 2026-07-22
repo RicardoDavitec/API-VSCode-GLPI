@@ -70,6 +70,16 @@ def build_upsert_args(c: dict, apply: bool) -> list[str] | None:
     return args
 
 
+def glpi_prefix_args() -> list[str]:
+    """Prefixo global --env= para o CLI bash (homolog/prod)."""
+    env = (os.environ.get("GLPI_ENV") or "prod").strip().lower()
+    if env in ("hml", "homo", "homologacao", "homologação"):
+        env = "homolog"
+    if env == "homolog":
+        return ["--env=homolog"]
+    return ["--env=prod"]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Aplica JSON do retro-scan (pais S antes dos filhos P). Dry-run padrao."
@@ -77,6 +87,11 @@ def main() -> int:
     ap.add_argument("--from", dest="from_path", required=True, help="JSON gerado pelo retro-scan")
     ap.add_argument("--glpi-bin", default="", help="Caminho do CLI glpi (default: tools/glpi/glpi)")
     ap.add_argument("--apply", action="store_true", help="Grava no GLPI (sem isso = dry-run)")
+    ap.add_argument(
+        "--env",
+        default=os.environ.get("GLPI_ENV", "prod"),
+        help="prod|homolog (default: GLPI_ENV ou prod)",
+    )
     ap.add_argument(
         "--include-skip",
         action="store_true",
@@ -120,12 +135,16 @@ def main() -> int:
         # tools/glpi/lib/retro_apply.py → tools/glpi/glpi
         glpi = str(Path(__file__).resolve().parent.parent / "glpi")
 
+    os.environ["GLPI_ENV"] = args.env
+    prefix = glpi_prefix_args()
+
     mode = "APPLY" if args.apply else "DRY-RUN"
     print(
         json.dumps(
             {
                 "ok": True,
                 "mode": mode,
+                "env": os.environ.get("GLPI_ENV", "prod"),
                 "from": str(src),
                 "selected": len(selected),
                 "phases": sum(1 for c in selected if c.get("kind") == "phase"),
@@ -144,7 +163,7 @@ def main() -> int:
             continue
         label = f"{c.get('kind')}:{c.get('code') or '-'} ← {c.get('parent_code') or '-'}"
         print(f"\n=== [{i}/{len(selected)}] {label} | {c.get('title', '')[:60]} ===", file=sys.stderr)
-        cmd = [glpi, *upsert_args]
+        cmd = [glpi, *prefix, *upsert_args]
         print("+ " + " ".join(cmd), file=sys.stderr)
         try:
             proc = subprocess.run(cmd, check=False)

@@ -32,19 +32,43 @@ def load_env_from_secrets(path: Path, fmt: str) -> dict[str, str]:
     out: dict[str, str] = {}
     if not path.is_file():
         return out
+    # Auto dotenv
+    if fmt in ("dotenv", "envfile") or path.suffix == ".env" or path.name == "glpi.env":
+        fmt = "dotenv"
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
+            continue
+        if fmt == "dotenv":
+            if "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k in ("GLPI_USER_TOKEN", "USER_TOKEN"):
+                out["user_token"] = v
+            elif k in ("GLPI_APP_TOKEN", "APP_TOKEN"):
+                out["app_token"] = v
+            elif k == "GLPI_API_URL_PROD":
+                out["api_url_prod"] = v.rstrip("/")
+            elif k == "GLPI_API_URL_HOMOLOG":
+                out["api_url_homolog"] = v.rstrip("/")
+            elif k in ("GLPI_API_URL", "API_URL"):
+                out["api_url"] = v.rstrip("/")
             continue
         if fmt == "generic":
             for key in ("API_URL", "USER_TOKEN", "APP_TOKEN"):
                 if line.upper().startswith(key + ":"):
                     out[key.lower()] = line.split(":", 1)[1].strip()
         else:
-            if re.search(r"url.*api", line, re.I):
+            if re.search(r"url.*api.*homolog", line, re.I):
+                m = re.search(r"(https?://\S+)", line)
+                if m:
+                    out["api_url_homolog"] = m.group(1).rstrip("/")
+            elif re.search(r"url.*api", line, re.I):
                 m = re.search(r"(https?://\S+)", line)
                 if m:
                     out["api_url"] = m.group(1).rstrip("/")
+                    out["api_url_prod"] = out["api_url"]
             elif re.search(r"pessoal\s+api-glpi", line, re.I):
                 out["user_token"] = line.split(":", 1)[1].strip()
             elif re.search(r"grupo\s+api-glpi", line, re.I):
@@ -54,6 +78,13 @@ def load_env_from_secrets(path: Path, fmt: str) -> dict[str, str]:
             elif line.upper().startswith("APP_TOKEN:"):
                 out["app_token"] = line.split(":", 1)[1].strip()
     return out
+
+
+def _ensure_apirest(url: str) -> str:
+    url = (url or "").rstrip("/")
+    if url and not url.endswith("apirest.php"):
+        url = f"{url}/apirest.php"
+    return url
 
 
 def http_get(url: str, headers: dict[str, str]) -> tuple[int, str]:
@@ -163,7 +194,12 @@ def main() -> int:
     p.add_argument("--user-token", default=os.environ.get("GLPI_USER_TOKEN", ""))
     p.add_argument("--app-token", default=os.environ.get("GLPI_APP_TOKEN", ""))
     p.add_argument("--secrets-file", default="")
-    p.add_argument("--secrets-format", default="pmf", choices=["pmf", "generic", "env"])
+    p.add_argument(
+        "--secrets-format",
+        default="dotenv",
+        choices=["dotenv", "pmf", "generic", "env", "envfile"],
+    )
+    p.add_argument("--env", default=os.environ.get("GLPI_ENV", "prod"), help="prod|homolog")
     p.add_argument("--preset", default="api-vscode-glpi")
     p.add_argument("--out", default="", help="Arquivo de saida (default .glpi/maps/states.json)")
     p.add_argument("--apply", action="store_true", help="Gravar arquivo")
@@ -176,18 +212,34 @@ def main() -> int:
     api_url = args.api_url
     user_token = args.user_token
     app_token = args.app_token or None
+    env_name = (args.env or "prod").strip().lower()
+    if env_name in ("hml", "homo", "homologacao", "homologação"):
+        env_name = "homolog"
 
-    if not user_token or (not api_url and args.secrets_file):
-        secrets_path = Path(args.secrets_file or os.path.expanduser("~/.secrets/GLPI-tokens.txt"))
+    secrets_path = Path(
+        args.secrets_file
+        or os.environ.get("GLPI_SECRETS_FILE")
+        or (
+            str(Path.home() / ".secrets" / "glpi.env")
+            if (Path.home() / ".secrets" / "glpi.env").is_file()
+            else str(Path.home() / ".secrets" / "GLPI-tokens.txt")
+        )
+    )
+    if not user_token or not api_url:
         env = load_env_from_secrets(secrets_path, args.secrets_format)
-        api_url = api_url or env.get("api_url", "")
         user_token = user_token or env.get("user_token", "")
         app_token = app_token or env.get("app_token")
+        if env_name == "homolog":
+            api_url = api_url or env.get("api_url_homolog") or env.get("api_url", "")
+        else:
+            api_url = api_url or env.get("api_url_prod") or env.get("api_url", "")
+    api_url = _ensure_apirest(api_url)
 
     if not api_url or not user_token:
         print("erro: informe --api-url e --user-token ou configure secrets", file=sys.stderr)
         return 1
 
+    print(f"[glpi-env] {env_name} → {api_url}", file=sys.stderr)
     session = init_session(api_url, user_token, app_token)
     try:
         states = fetch_project_states(api_url, session, app_token)

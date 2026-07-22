@@ -42,16 +42,16 @@ def check_prereqs() -> list[str]:
 
 
 def secrets_hint(preset: str) -> str:
-    if preset == "api-vscode-glpi":
-        return """Formato pmf (~/.secrets/GLPI-tokens.txt):
-  Pessoal API-GLPI: <user_token>
-  Grupo   API-GLPI: <app_token>
-  URL-API: https://suporte.franca.sp.gov.br/apirest.php
-"""
-    return """Formato generic:
-  USER_TOKEN: <token>
-  APP_TOKEN: <token opcional>
-  API_URL: https://seu-glpi/apirest.php
+    return """Formato preferido — dotenv (~/.secrets/glpi.env):
+  GLPI_USER_TOKEN=...
+  GLPI_APP_TOKEN=...
+  GLPI_API_URL_PROD=https://suporte.franca.sp.gov.br/apirest.php
+  GLPI_API_URL_HOMOLOG=https://suporte-homolog.franca.sp.gov.br/apirest.php
+
+Migrar do legado:
+  ./scripts/migrate-glpi-secrets-to-env.sh
+
+Legado pmf (~/.secrets/GLPI-tokens.txt) ainda e aceito.
 """
 
 
@@ -89,7 +89,12 @@ def interactive_wizard(args: argparse.Namespace) -> argparse.Namespace:
         args.project = input("project_id [0]: ").strip() or "0"
 
     if not args.secrets_file:
-        args.secrets_file = str(Path.home() / ".secrets" / "GLPI-tokens.txt")
+        preferred = Path.home() / ".secrets" / "glpi.env"
+        legacy = Path.home() / ".secrets" / "GLPI-tokens.txt"
+        args.secrets_file = str(preferred if preferred.is_file() else legacy)
+    if not getattr(args, "secrets_format", None) or args.secrets_format == "pmf":
+        if str(args.secrets_file).endswith(".env"):
+            args.secrets_format = "dotenv"
 
     sf = expand(args.secrets_file)
     if not sf.is_file():
@@ -114,7 +119,7 @@ def main() -> int:
     p.add_argument("--project", default=None)
     p.add_argument("--glpi-url", default="")
     p.add_argument("--secrets-file", default="")
-    p.add_argument("--secrets-format", default="pmf", choices=["pmf", "generic", "env"])
+    p.add_argument("--secrets-format", default="dotenv", choices=["dotenv", "pmf", "generic", "env", "envfile"])
     p.add_argument("--yes", "-y", action="store_true")
     p.add_argument("--force", action="store_true")
     p.add_argument("--skip-bootstrap", action="store_true")

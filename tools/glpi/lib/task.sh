@@ -60,7 +60,7 @@ find_task_id_by_code() {
   local state_file
   load_project_config
   pid="${pid:-$GLPI_CFG_PROJECT_ID}"
-  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  state_file="$(glpi_state_file "$pid")"
   [[ -f "$state_file" ]] || return 1
   # match case-insensitive
   jq -r --arg c "$code" '
@@ -73,21 +73,23 @@ find_task_id_by_name() {
   local state_file
   load_project_config
   pid="${pid:-$GLPI_CFG_PROJECT_ID}"
-  state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
+  state_file="$(glpi_state_file "$pid")"
   [[ -f "$state_file" ]] || return 1
   jq -r --arg n "$name" '.tasks[] | select(.name==$n) | .id' "$state_file" | head -n1
 }
 
 append_task_to_state() {
   local pid="$1" tid="$2" name="$3" code="${4:-}" kind="${5:-}" parent_code="${6:-}" parent_id="${7:-}"
-  local state_file="${REPO_ROOT}/.glpi/state-project-${pid}.json"
-  local tmp
+  local state_file tmp
+  state_file="$(glpi_state_file "$pid")"
   if [[ ! -f "$state_file" ]]; then
     jq -n --argjson pid "$pid" --argjson id "$tid" --arg name "$name" --arg code "$code" \
       --arg kind "$kind" --arg parent_code "$parent_code" --arg parent_id "$parent_id" \
       --arg at "$(date -Iseconds)" \
+      --arg env "$(normalize_glpi_env_name "${GLPI_ENV:-prod}")" \
       '{
         project_id:$pid, template:"manual", hierarchy:"S=phase parent / P=item child",
+        environment:$env,
         updated_at:$at,
         tasks:[{
           id:$id, name:$name, code:$code, kind:$kind,

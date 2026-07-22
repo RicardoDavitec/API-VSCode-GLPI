@@ -228,9 +228,28 @@ Atualizado automaticamente após `seed-phases --apply`. Pode ser commitado (não
 
 ## 4. Autenticação e secrets
 
+### 4.0 Homologação (PMF)
+
+| | Produção | Homologação |
+|---|----------|-------------|
+| UI | `https://suporte.franca.sp.gov.br` | `https://suporte-homolog.franca.sp.gov.br` |
+| CLI | `--env=prod` (default) | `--env=homolog` / `--homolog` |
+| Secrets | `~/.secrets/glpi.env` | mesmas chaves; URL `GLPI_API_URL_HOMOLOG` |
+| State local | `state-project-<id>.json` | `state-project-<id>.homolog.json` |
+| IDs | `project.yaml` | `project.homolog.yaml` ou bloco `homolog:` |
+
+```bash
+./scripts/migrate-glpi-secrets-to-env.sh
+./tools/glpi/glpi --env=homolog auth
+# Se ERROR_WRONG_APP_TOKEN: registre App-Token na homolog ou
+# GLPI_APP_TOKEN_HOMOLOG=...  ou  GLPI_REQUIRE_APP_TOKEN=0 ./tools/glpi/glpi --homolog auth
+```
+
+Decorator Python: `tools/glpi/lib/env_context.py` (`@with_glpi_env("homolog")`).
+
 ### 4.1 Arquivo padrão
 
-`~/.secrets/GLPI-tokens.txt` — pasta `.secrets` na **raiz do home** (Linux/WSL: `/home/<user>/.secrets/`; Windows: `%USERPROFILE%\.secrets\`). Fora do git.
+Preferido: `~/.secrets/glpi.env` (dotenv). Legado: `~/.secrets/GLPI-tokens.txt` — pasta `.secrets` na **raiz do home** (Linux/WSL: `/home/<user>/.secrets/`; Windows: `%USERPROFILE%\.secrets\`). Fora do git.
 
 Setup completo (WSL/Windows): [`MANUAL_INTEGRACAO_GLPI.md`](MANUAL_INTEGRACAO_GLPI.md) §§3–5.
 

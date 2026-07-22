@@ -53,12 +53,25 @@ Config: `.glpi/instance.yaml` + `.glpi/project.yaml`
 
 ## Secrets
 
+Path preferido: `~/.secrets/glpi.env` (dotenv). Legado: `~/.secrets/GLPI-tokens.txt`.  
+Override: `GLPI_SECRETS_FILE` · ambiente: `GLPI_ENV=prod|homolog` ou `glpi --env=homolog`.
+
 | Formato | Labels |
 |---------|--------|
-| `pmf` | Pessoal API-GLPI · Grupo API-GLPI · URL-API |
+| `dotenv` (recomendado) | `GLPI_USER_TOKEN` · `GLPI_APP_TOKEN` · `GLPI_API_URL_PROD` · `GLPI_API_URL_HOMOLOG` |
+| `pmf` (legado) | Pessoal API-GLPI · Grupo API-GLPI · URL-API · URL-API Homologação |
 | `generic` | USER_TOKEN · APP_TOKEN · API_URL |
 
-Path: `~/.secrets/GLPI-tokens.txt` (override: `GLPI_SECRETS_FILE`)
+Migrar legado → dotenv:
+
+```bash
+./scripts/migrate-glpi-secrets-to-env.sh
+./tools/glpi/glpi --env=homolog auth
+```
+
+Homologação PMF: `https://suporte-homolog.franca.sp.gov.br` (API com `/apirest.php`). State local separado: `.glpi/state-project-<id>.homolog.json`. IDs: `.glpi/project.homolog.yaml` ou bloco `homolog:` em `project.yaml`.
+
+Exemplo dotenv: `.glpi/glpi.env.example`
 
 ## Estados
 
