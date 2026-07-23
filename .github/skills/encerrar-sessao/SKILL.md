@@ -26,7 +26,7 @@ Fecha a sessao do dia com registro objetivo em `docs/05_progresso/geral/`.
 7. **Anexar ao GLPI (opcional):** perguntar se deve enviar o `SESSAO_*` como Document no Ticket.
    - Dry-run: `./tools/glpi/bin/glpi-document-attach --file=docs/05_progresso/geral/SESSAO_....md --ticket`
    - Apply: mesmo comando com `--apply` (somente com confirmação).
-   - Opcional: follow-up texto via skill `glpi-followup` apontando o arquivo/sha.
+   - Opcional: acompanhamento via skill `acompanhar-chamado` apontando o arquivo/sha.
 8. Perguntar sobre backup; se sim, carregar skill `backup` e executar.
 
 ## Regras essenciais
@@ -39,7 +39,7 @@ Fecha a sessao do dia com registro objetivo em `docs/05_progresso/geral/`.
 ## Referencias
 
 - Skill `documentar`
-- Skill `glpi-followup`
+- Skill `acompanhar-chamado` (alias legado: `glpi-followup`)
 - Skill `backup`
 - Wrapper: `tools/glpi/bin/glpi-document-attach`
 - Dicas: [DICAS_USO.md](DICAS_USO.md)

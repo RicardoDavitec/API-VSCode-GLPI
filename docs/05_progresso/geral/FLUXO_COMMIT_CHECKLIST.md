@@ -20,7 +20,7 @@ A ProjectTask fecha o ciclo **plano local (S/P) ↔ gestão de entrega** no Proj
 ./tools/glpi/glpi ticket followup - "[S4.P5] resumo da entrega + commit/sha + proximo passo"
 ```
 
-Skills: `.github/skills/glpi-task-upsert/SKILL.md`, `.github/skills/glpi-followup/SKILL.md`.  
+Skills: `.github/skills/glpi-task-upsert/SKILL.md`, `.github/skills/acompanhar-chamado/SKILL.md` (alias: `glpi-followup`).  
 Hierarquia: `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`.
 
 ## Comandos rápidos

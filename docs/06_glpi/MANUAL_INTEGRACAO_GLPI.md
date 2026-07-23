@@ -45,7 +45,7 @@ O **pmf-dev-kit** é o repositório **fonte** (template) da Prefeitura de Franca
 |----------|--------|
 | `tools/glpi/` | CLI + wrappers (`bin/glpi-*`) para API REST do GLPI |
 | `.glpi/` | Config versionável do produto (sem secrets) + templates de fases |
-| `.github/skills/glpi-*` | Skills Cursor (follow-up, upsert, project-create, retro-scan) |
+| `.github/skills/acompanhar-chamado` (+ `glpi-*`) | Skills Cursor (acompanhamento, upsert, project-create, retro-scan) |
 | `docs/06_glpi/` | Documentação da integração |
 | `scripts/bootstrap-into.sh` | Aplica o kit em um clone de produto |
 | `scripts/install-glpi.sh` | Assistente bash (interativo + flags) |
@@ -552,7 +552,7 @@ Esperado: JSON/session ok e saída sem erro de App-Token / user_token.
 
 | Ação | Comando / skill |
 |------|-----------------|
-| Follow-up no chamado | `./tools/glpi/bin/glpi-followup` ou skill `glpi-followup` |
+| Follow-up no chamado | `./tools/glpi/bin/glpi-followup` ou skill `acompanhar-chamado` (alias `glpi-followup`) |
 | Atualizar fase/item | `./tools/glpi/bin/glpi-task-upsert --code=S4.P1 ...` ou skill `glpi-task-upsert` |
 | Consultar projeto | `./tools/glpi/glpi project get` / `project tasks` |
 | Encerrar sessão | skill `encerrar-sessao` + follow-up opcional |

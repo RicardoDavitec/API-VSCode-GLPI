@@ -7,9 +7,10 @@
 | encerrar-sessao | `SESSAO_*` em `docs/05_progresso/geral/` (+ anexo GLPI opcional) |
 | oncoto-oncovo | Situação do plano |
 | commit / documentar | Padrão de commit e docs |
-| glpi-followup | ITILFollowup no Ticket (+ `document attach` opcional) |
+| **acompanhar-chamado** | ITILFollowup no Ticket (título sugerido + edição/default; anexo opcional) |
+| glpi-followup | Alias **deprecated** → `acompanhar-chamado` |
 | glpi-task-upsert | ProjectTask S/P (`--attach=arquivo` opcional) |
 | glpi-project-create | Novo Project |
 | glpi-retro-scan | Candidatos a partir do markdown |
 
-CLI: `tools/glpi/bin/*` (inclui `glpi-document-attach`) · Docs: `docs/06_glpi/`
+CLI: `tools/glpi/bin/*` (inclui `glpi-followup`, `glpi-document-attach`) · Docs: `docs/06_glpi/`

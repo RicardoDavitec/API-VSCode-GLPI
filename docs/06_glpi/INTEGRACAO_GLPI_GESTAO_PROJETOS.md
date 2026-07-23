@@ -111,7 +111,7 @@ Perfis: `glpi-only` | `pmf-core` | `full-skeleton` — ver manual de integraçã
 ./tools/glpi/bin/glpi-task-upsert --code=S1.P1 --parent-code=S1 --apply
 ```
 
-Skills: `glpi-followup`, `glpi-task-upsert`, `glpi-project-create`, `glpi-retro-scan`.
+Skills: `acompanhar-chamado` (alias `glpi-followup`), `glpi-task-upsert`, `glpi-project-create`, `glpi-retro-scan`.
 
 ---
 

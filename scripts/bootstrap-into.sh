@@ -150,13 +150,13 @@ install_skill() {
 
 case "$PROFILE" in
   glpi-only)
-    for s in glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
+    for s in acompanhar-chamado glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
       install_skill "$s"
     done
     ;;
   pmf-core|full-skeleton)
     for s in commit documentar exporte importe atualizar backup encerrar-sessao oncoto-oncovo \
-             glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
+             acompanhar-chamado glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
       install_skill "$s"
     done
     cp "$KIT_ROOT/.github/skills/GUIA_USO_SKILLS.md" "$TARGET/.github/skills/GUIA_USO_SKILLS.md"

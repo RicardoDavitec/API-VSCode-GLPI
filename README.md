@@ -59,7 +59,7 @@ python3 scripts/install_glpi.py --discover-only --target=~/projetos/meu-app --ye
 |----------|--------|
 | `tools/glpi/` | CLI + wrappers (`bin/glpi-*`) para API REST do GLPI |
 | `.glpi/` | Config do produto (sem secrets) + templates de fases |
-| `.github/skills/glpi-*` | Skills Cursor (follow-up, upsert, project-create, retro-scan) |
+| `.github/skills/acompanhar-chamado` (+ `glpi-*`) | Skills Cursor (acompanhamento, upsert, project-create, retro-scan) |
 | `docs/06_glpi/` | Documentação da integração |
 | `scripts/bootstrap-into.sh` | Aplica o kit em um clone de produto |
 | `scripts/install-glpi.sh` | Assistente bash (interativo + flags) |
@@ -394,7 +394,7 @@ Na **raiz do produto**:
 
 | Ação | Como |
 |------|------|
-| Follow-up | `./tools/glpi/bin/glpi-followup` / skill `glpi-followup` |
+| Follow-up | `./tools/glpi/bin/glpi-followup` / skill `acompanhar-chamado` (alias `glpi-followup`) |
 | Upsert S/P | `./tools/glpi/bin/glpi-task-upsert --code=S4.P1 ...` |
 | Consulta | `./tools/glpi/glpi project get` / `project tasks` |
 

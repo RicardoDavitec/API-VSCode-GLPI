@@ -1,6 +1,6 @@
-# Integracao SKILLs IA ó Projeto <-> GLPI
+# Integracao SKILLs IA ù Projeto <-> GLPI
 
-> Hierarquia canonica: **S = tarefa pai** ∑ **P = subtarefa filho**.
+> Hierarquia canonica: **S = tarefa pai** ù **P = subtarefa filho**.
 > Detalhe: `HIERARQUIA_S_P_GLPI.md`
 
 ## Relacao entre entidades
@@ -8,7 +8,7 @@
 | Entidade | Ambiente | Documentacao | Nivel | Acao |
 |----------|----------|--------------|-------|------|
 | VSCode (Agente IA) | Projeto (Win ou WSL) | Plano / checklist / todolist | Fase/semana **(S)** ? Item **(P)** | Finalizacao de tarefa |
-| Git (GitHub / Gitness) | Repositorio | Arquivo md e/ou historico | ó | Commit (push) / pull |
+| Git (GitHub / Gitness) | Repositorio | Arquivo md e/ou historico | ù | Commit (push) / pull |
 | GLPI | Projeto | Lista de tarefas do projeto | Tarefa **(pai)** ? Subtarefa **(filho)** | Cria / atualiza tarefa |
 
 ## Skills e scripts (execucao direta)
@@ -21,8 +21,8 @@ As skills **orquestram** os wrappers em `tools/glpi/bin/` (podem ser chamados se
 | `glpi-retro-scan` | `bin/glpi-retro-scan` | Candidatos S/P a partir de markdown (mono/polyrepo) |
 | (pos-scan) | `bin/glpi-retro-apply` | Aplica JSON em ordem pai?filho |
 | `glpi-task-upsert` | `bin/glpi-task-upsert` | Cria/atualiza pai ou filho |
-| `glpi-followup` | `bin/glpi-followup` | Evidencia no Ticket |
-| ó | `bin/glpi-seed-phases` | Seed pais S0ñS7 |
+| `acompanhar-chamado` | `bin/glpi-followup` | Evidencia no Ticket (alias skill: `glpi-followup`) |
+| ù | `bin/glpi-seed-phases` | Seed pais S0ùS7 |
 
 ## Campos GLPI pertinentes (resumo)
 
@@ -38,5 +38,7 @@ As skills **orquestram** os wrappers em `tools/glpi/bin/` (podem ser chamados se
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
 ./tools/glpi/bin/glpi-task-upsert --code=S4.P5 --parent-code=S4 --name="..." --state=gep3 --percent=40
-./tools/glpi/bin/glpi-followup - "[S4.P5] resumo + sha"
+./tools/glpi/bin/glpi-followup - "Web - F1 - P2 - Criacao CRUD Usuario
+
+Resumo + sha"
 ```

@@ -11,7 +11,7 @@
 
 ## Skills recomendados
 - commit, documentar, encerrar-sessao, backup
-- glpi-followup, glpi-task-upsert, glpi-retro-scan
+- acompanhar-chamado (alias glpi-followup), glpi-task-upsert, glpi-retro-scan
 - exporte, importe, atualizar
 
 ## Padrão de commit

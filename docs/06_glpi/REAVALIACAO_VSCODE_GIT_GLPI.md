@@ -55,7 +55,7 @@
 pmf-dev-kit ──bootstrap──► produto (tools/glpi + skills + docs/06_glpi)
 VSCode/Cursor ──skills──► git commit/push (exporte)
        │
-       ├──glpi-followup──► Ticket (ITILFollowup)
+       ├──acompanhar-chamado──► Ticket (ITILFollowup)
        ├──glpi-task-upsert / retro-apply──► ProjectTask (S/P, GEP, %)
        └──glpi-project-create──► Project
 CLI seed-phases ──► ProjectTasks a partir de templates
@@ -72,7 +72,7 @@ CLI seed-phases ──► ProjectTasks a partir de templates
 | Bootstrap / upgrade em produtos | Feito (`scripts/*-into.sh`) |
 | Sync automático no push/CI | **Não** |
 | Planos markdown com todos os campos GLPI | Parcial (convenção S/P + checklist) |
-| Ticket como diário institucional | Feito (`glpi-followup`) |
+| Ticket como diário institucional | Feito (`acompanhar-chamado`; alias `glpi-followup`) |
 
 **Gap residual:** sync automático CI pós-deploy; dry-run no followup; completar aliases GEP 2/5/6/8 no mapa de estados.
 
@@ -140,7 +140,7 @@ Checklist `[x]` sozinho **não basta** para preencher Estado GEP, datas e gerent
 | `glpi-project-create` | Projeto novo | POST `Project` com campos da estrutura | P1 |
 | `glpi-retro-scan` | Inventário / onboarding | Lê planos/commits (workspace) → candidatos ProjectTask | P1 |
 | `glpi-task-upsert` | Fim de item / sync | Cria/atualiza ProjectTask (estado, %, datas, pai) | P0 |
-| `glpi-followup` | Checkpoint / push | ITILFollowup no Ticket (já existe) | Feito |
+| `acompanhar-chamado` | Checkpoint / push | ITILFollowup no Ticket (já existe; alias `glpi-followup`) | Feito |
 | `glpi-sync-plano` | Após editar PLANO_*.md | Diff checklist ↔ ProjectTasks | P1 |
 | Extensão `exporte` / CI | Push bem-sucedido | follow-up + opcional bump % task | P2 |
 | Extensão `encerrar-sessao` | Fim do dia | Resumo → follow-up + tasks tocadas | P2 |
@@ -160,7 +160,7 @@ glpi sync-plano [--apply]
 
 | Manter | Motivo |
 |--------|--------|
-| Ticket 10554 + `glpi-followup` | Auditoria institucional (DTI) |
+| Ticket + `acompanhar-chamado` | Auditoria institucional (DTI) |
 | Project 72 + tasks 800–805 | Base de fases; evoluir campos, não recriar às cegas |
 | `.glpi/project.yaml` + secrets | Config por repo |
 | `workspace.yaml` | Base do retro-scan polyrepo |
@@ -183,7 +183,7 @@ glpi sync-plano [--apply]
 3. **`documentar`** — marcar item no plano **e** preencher campos GLPI do item.
 4. **`glpi-task-upsert`** — atualiza ProjectTask (estado → GEP 4 Testando / % / real_end se fechou).
 5. **`commit` + `exporte`** — evidência no Git.
-6. **`glpi-followup`** — uma linha no Ticket: fase + sha + próximo.
+6. **`acompanhar-chamado`** — título (sugerido/editável) + evidência no Ticket: fase + sha + próximo.
 7. Checkbox *follow-up GLPI* + (futuro) *ProjectTask atualizada?*.
 
 Retroativo (uma vez / sob demanda):
