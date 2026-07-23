@@ -40,7 +40,7 @@ Os IDs Ticket/Project abaixo usam o exemplo histórico **SIGS-Samu** (10554 / 72
                              │
               ┌──────────────┼──────────────┐
               ▼              ▼              ▼
-     skill glpi-followup   CLI glpi    (futuro CI)
+     skill acompanhar-chamado   CLI glpi    (futuro CI)
               │              │
               └──────┬───────┘
                      ▼
@@ -61,7 +61,7 @@ Os IDs Ticket/Project abaixo usam o exemplo histórico **SIGS-Samu** (10554 / 72
 1. Trabalhar no item do plano (ex.: S4, S1.P1).
 2. Validar localmente (build/health).
 3. Commit + push (`commit` / `exporte`).
-4. Registrar evidência no chamado: `glpi-followup` → `ITILFollowup` no Ticket do `project.yaml`.
+4. Registrar evidência no chamado: `acompanhar-chamado` → `ITILFollowup` no Ticket do `project.yaml`.
 5. (Opcional) Atualizar % / status da `ProjectTask` (`glpi-task-upsert` ou UI).
 6. Marcar checkbox *follow-up GLPI enviado?* no checklist de commit (quando existir).
 
@@ -405,7 +405,9 @@ Skill: `.github/skills/glpi-project-create/SKILL.md`.
 
 #### `retro-scan` (P1)
 
-Lê `.glpi/workspace.yaml`, varre planos/checklists/**commits** e gera candidatos **S (pai)** / **P (filho)** em `docs/06_glpi/retro-scans/`.
+Lê `.glpi/workspace.yaml`, varre planos/checklists/**commits** e gera candidatos em `docs/06_glpi/retro-scans/`.
+
+**Três níveis (`--pack`, v5):** Fase **S** (pai) → Pacote **P** ~2h (filho ProjectTask) → **átomos** só no `content` (e em `atoms_detail` no JSON). Alvo default 120 min (`--pack-target-min` / `GLPI_RETRO_PACK_TARGET_MIN`); gap `--pack-gap-min` (45). Agrupa por módulo + pai + dia. Saída: `*_pack.json` (não sobrescreve scan sem pack).
 
 **Timestamps (v2):** commits no mesmo dia encadeiam `real_start`←commit anterior; 1º do dia usa estimativa (`GLPI_RETRO_ESTIMATE_MINUTES`, default 60). Checklists/planos sem code S/P: `git blame` na linha (`[x]`/`[~]`) + encadeamento no mesmo arquivo/dia; fallback por similaridade de título com commits (`GLPI_RETRO_COMMIT_MATCH_MIN`).
 
@@ -429,6 +431,7 @@ Campos: `plan_start`, `plan_end`, `real_start`, `real_end`, `temporal_source` (n
 ```bash
 ./tools/glpi/bin/glpi-retro-scan
 ./tools/glpi/glpi retro-scan --workspace=.glpi/workspace.yaml
+./tools/glpi/glpi retro-scan --pack --pack-target-min=120
 ```
 
 #### `document attach` (anexo)
@@ -499,7 +502,8 @@ Filhos (itens P) vêm do `retro-scan` + `task upsert --code=Sn.Pm --parent-code=
 | **`glpi-task-upsert`** | Cria/atualiza pai S / filho P (GEP, %, datas) | “atualize S4.P5 para gep3” |
 | **`glpi-project-create`** | Cria Project GLPI | “crie o projeto GLPI em dry-run” |
 | **`glpi-retro-scan`** | Candidatos S(pai)/P(filho) do markdown | “rode o retro-scan GLPI” |
-| **`glpi-followup`** | Enviar follow-up no Ticket via CLI | “envie follow-up GLPI com o resumo da sessão” |
+| **`acompanhar-chamado`** | Enviar acompanhamento no Ticket (título sugerido + edição/default) | “acompanhar chamado” / “registre no chamado” |
+| **`glpi-followup`** | Alias **deprecated** → `acompanhar-chamado` | “glpi-followup” (legado) |
 | **`commit`** | Mensagem padronizada; checklist menciona GLPI | “faça o commit no padrão” |
 | **`exporte`** | Status → commit → push do branch ativo | “exporte” / “salve e publique” |
 | **`importe`** | Fetch + pull do remoto | “importe” |
@@ -508,14 +512,15 @@ Filhos (itens P) vêm do `retro-scan` + `task upsert --code=Sn.Pm --parent-code=
 | **`documentar`** | Atualizar planos/checklists | “documente o progresso” |
 | **`backup`** | Backup compactado (quando existir script) | “faça backup” |
 
-### Skill `glpi-followup` — checklist do agente
+### Skill `acompanhar-chamado` — checklist do agente
 
-1. Montar texto: `[Sx.y] o quê · evidência · próximo`.
-2. Rodar `./tools/glpi/glpi ticket followup - "…"`.
-3. Confirmar ID do follow-up na resposta.
-4. Lembrar checkbox em `FLUXO_COMMIT_CHECKLIST.md`.
+1. Sugerir **titulo** no padrao `{Modulo} - {F|esporadico} [- P] - {acao}`; perguntar edicao; sem edicao util → usar sugestao (default).
+2. Montar texto: titulo + resumo · evidencia · proximo.
+3. Rodar `./tools/glpi/glpi ticket followup - "…"`.
+4. Confirmar ID do follow-up na resposta.
+5. Lembrar checkbox em `FLUXO_COMMIT_CHECKLIST.md`.
 
-Skill: `.github/skills/glpi-followup/SKILL.md`
+Skill: `.github/skills/acompanhar-chamado/SKILL.md` (alias: `.github/skills/glpi-followup/SKILL.md`)
 
 ### Integração com o checklist de commit
 
@@ -557,7 +562,7 @@ Fecha o ciclo: evidência no git **e** no suporte institucional.
 
 1. Skill `encerrar-sessao` → `SESSAO_*.md`
 2. Commit/push (`exporte`)
-3. Skill `glpi-followup` com resumo do dia (opcional mas recomendado)
+3. Skill `acompanhar-chamado` com resumo do dia (opcional mas recomendado)
 
 ---
 
@@ -622,13 +627,14 @@ UI (exemplo): `https://suporte.franca.sp.gov.br/front/project.form.php?id=72`
 | Item | Status |
 |------|--------|
 | CLI auth / ticket / project / seed | Feito |
-| Skill `glpi-followup` | Feito |
+| Skill `acompanhar-chamado` | Feito (alias legado `glpi-followup`) |
 | Seed corporate-phases no 72 | Feito |
 | CLI `task get/create/patch/upsert` + skill `glpi-task-upsert` | Feito (P0) |
 | Mapa estados GEP (`gep1/3/4/7/9`; faltam 2/5/6/8 na amostra) | Parcial (P1) |
 | `corporate-phases` com state/% | Feito (P1) |
 | `project create` + skill `glpi-project-create` | Feito (P1) |
 | `retro-scan` dry-run + skill `glpi-retro-scan` | Feito (P1) |
+| `retro-scan --pack` (S→P~2h→átomos) | Feito (v5) |
 | `retro-apply` pai→filho + wrappers `bin/` | Feito (P1) |
 | `retro-scan --apply` auto-create tasks | Substituído por `retro-apply --apply` |
 | `--dry-run` no followup | Pendente |
@@ -646,7 +652,7 @@ UI (exemplo): `https://suporte.franca.sp.gov.br/front/project.form.php?id=72`
 | Visão de integração | `docs/06_glpi/INTEGRACAO_GLPI_GESTAO_PROJETOS.md` |
 | API REST (cópia) | `docs/06_glpi/GLPI-rest-API-documentationmd` |
 | CLI | `tools/glpi/glpi` |
-| Skill follow-up | `.github/skills/glpi-followup/SKILL.md` |
+| Skill acompanhamento | `.github/skills/acompanhar-chamado/SKILL.md` |
 | Checklist commit | `docs/05_progresso/geral/FLUXO_COMMIT_CHECKLIST.md` |
 | Plano produto | `docs/05_progresso/geral/PLANO_IMPLEMENTACAO.md` |
 | Bootstrap | `scripts/bootstrap-into.sh` |

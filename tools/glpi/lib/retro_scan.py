@@ -15,6 +15,14 @@ from pathlib import Path
 # Duração estimada (min) para o 1º commit do dia quando não há Plan ini / outra meta
 DEFAULT_ESTIMATE_MINUTES = int(os.environ.get("GLPI_RETRO_ESTIMATE_MINUTES", "60"))
 
+# Empacotamento 3 níveis: Fase(S) → Pacote(P ~2h) → átomos só no content
+# GLPI_RETRO_PACK_MODE: off | on  (CLI --pack / --no-pack sobrescreve)
+DEFAULT_PACK_MODE = (os.environ.get("GLPI_RETRO_PACK_MODE", "off") or "off").strip().lower()
+DEFAULT_PACK_TARGET_MIN = int(os.environ.get("GLPI_RETRO_PACK_TARGET_MIN", "120"))
+DEFAULT_PACK_GAP_MIN = int(os.environ.get("GLPI_RETRO_PACK_GAP_MIN", "45"))
+DEFAULT_PACK_ATOM_CLAMP_MIN = int(os.environ.get("GLPI_RETRO_PACK_ATOM_CLAMP_MIN", "480"))
+DEFAULT_PACK_CONTENT_MAX_ATOMS = int(os.environ.get("GLPI_RETRO_PACK_CONTENT_MAX_ATOMS", "40"))
+
 CHECK_RE = re.compile(r"^\s*[-*]\s*\[([ xX~])\]\s+(.+)$")
 TABLE_STATUS_RE = re.compile(r"^\|\s*(.+?)\s*\|\s*\[([ xX~])\]\s*\|")
 PHASE_HEADING_RE = re.compile(
@@ -1660,13 +1668,548 @@ def load_existing_state(repo_root: Path, project_id: str) -> tuple[set[str], set
     return names, codes
 
 
+# ---------------------------------------------------------------------------
+# Empacotamento 3 níveis: Fase (S) → Pacote (P ~2h) → átomos (só content)
+# ---------------------------------------------------------------------------
+
+_MODULE_PATH_MAP = {
+    "backend": "backend",
+    "frontend": "web",
+    "web": "web",
+    "mobile": "mobile",
+    "postgree": "postgresql",
+    "postgres": "postgresql",
+    "postgresql": "postgresql",
+    "infra": "infra",
+    "geral": "geral",
+    "docs": "docs",
+}
+
+_MODULE_PHASE_TITLES = {
+    "backend": "Modulo backend",
+    "web": "Modulo web / frontend",
+    "mobile": "Modulo mobile",
+    "infra": "Modulo infra / deploy",
+    "postgresql": "Modulo postgresql / banco",
+    "docs": "Modulo documentacao",
+    "geral": "Modulo geral / transversal",
+    "ops": "Checklist operacional (processo)",
+}
+
+_NOISE_TITLE_RE = re.compile(
+    r"(?i)^(mudança tem objetivo|mudanca tem objetivo|build ou valida|"
+    r"docs foram atualiz|nenhuma alteração|nenhuma alteracao|"
+    r"mensagem do commit|data e hora estão|data e hora estao|"
+    r"follow-up glpi|dtos valid|health check|migrations valid|"
+    r"testes mínimos|testes minimos|build do frontend|variáveis públicas|"
+    r"variaveis publicas|integração com backend|integracao com backend|"
+    r"build de release|permissões revis|permissoes revis|"
+    r"índices e readme|indices e readme|links internos|"
+    r"checklist e cronograma|ssh aberto|backup completo|commit/push|"
+    r"stack local|entrar no servidor|informações de infra|informacoes de infra|"
+    r"pânico$|panico$|emergência$|emergencia$|ambos$)"
+)
+
+
+def infer_module(c: dict) -> str:
+    """Inferir módulo a partir do path gestao-projeto / apps / título."""
+    for s in c.get("sources") or []:
+        path = s.get("path") or ""
+        m = re.search(r"05-gestao-projeto/([^/]+)/", path)
+        if m:
+            return _MODULE_PATH_MAP.get(m.group(1).lower(), m.group(1).lower())
+        m = re.search(r"(?:^|/)apps/(backend|web|mobile)(?:/|$)", path)
+        if m:
+            return "web" if m.group(1) == "web" else m.group(1).lower()
+    blob = " ".join(
+        [(s.get("path") or "") for s in (c.get("sources") or [])] + [c.get("title") or ""]
+    ).lower()
+    rules = [
+        ("backend", r"backend|nest\b|\bdto\b|/api\b|prisma"),
+        ("mobile", r"mobile|\bapk\b|expo|fcm|react-native"),
+        ("web", r"frontend|apps/web|/admin\b|eventos ao vivo"),
+        ("postgresql", r"postgres|postgree|\bsql\b|banco de dados"),
+        ("infra", r"\binfra\b|deploy|docker|servidor|nginx|proxy|cutover"),
+        ("docs", r"docs/|\bglpi\b|documenta"),
+    ]
+    for name, pat in rules:
+        if re.search(pat, blob):
+            return name
+    return "geral"
+
+
+def is_noise_atom(c: dict) -> bool:
+    """Itens de processo/checklist operacional — dobrados no content, sem ProjectTask."""
+    title = (c.get("title") or "").strip()
+    if len(title) < 12:
+        return True
+    if _NOISE_TITLE_RE.search(title):
+        return True
+    return False
+
+
+def atom_duration_minutes(c: dict, *, clamp_min: int = DEFAULT_PACK_ATOM_CLAMP_MIN) -> float:
+    """Duração em minutos (real → plan → estimated); clamp evita outliers de blame."""
+    rs, re_ = _parse_dt(c.get("real_start")), _parse_dt(c.get("real_end"))
+    if rs and re_ and re_ >= rs:
+        mins = (re_ - rs).total_seconds() / 60.0
+        return float(min(mins, clamp_min)) if clamp_min > 0 else float(mins)
+    ps, pe = _parse_dt(c.get("plan_start")), _parse_dt(c.get("plan_end"))
+    if ps and pe and pe >= ps:
+        mins = (pe - ps).total_seconds() / 60.0
+        return float(min(mins, clamp_min)) if clamp_min > 0 else float(mins)
+    if c.get("estimated_minutes"):
+        return float(c["estimated_minutes"])
+    return float(DEFAULT_ESTIMATE_MINUTES)
+
+
+def _primary_source_path(c: dict) -> str:
+    for s in c.get("sources") or []:
+        if s.get("path") and s.get("kind") in ("plan", "checklist", "todolist"):
+            return str(s["path"])
+    for s in c.get("sources") or []:
+        if s.get("path"):
+            return str(s["path"])
+    return ""
+
+
+def _atom_sort_key(c: dict) -> datetime:
+    return (
+        _parse_dt(c.get("real_start"))
+        or _parse_dt(c.get("plan_start"))
+        or _parse_dt(c.get("real_end"))
+        or _parse_dt(c.get("plan_end"))
+        or datetime.min
+    )
+
+
+def _status_from_atoms(atoms: list[dict]) -> tuple[str, int, str]:
+    if not atoms:
+        return "pending", 0, "gep1"
+    statuses = [a.get("status_local") or "pending" for a in atoms]
+    if all(s == "done" for s in statuses):
+        return "done", 100, "gep7"
+    if all(s == "pending" for s in statuses):
+        return "pending", 0, "gep1"
+    # parcial: média dos percentuais
+    pcts = [int(a.get("percent_done") or percent_from_status(a.get("status_local") or "pending")) for a in atoms]
+    avg = int(round(sum(pcts) / len(pcts))) if pcts else 50
+    return "partial", avg, "gep3"
+
+
+def _module_phase_code(module: str) -> str:
+    slug = re.sub(r"[^A-Z0-9]", "", (module or "GERAL").upper())[:12] or "GERAL"
+    return f"M.{slug}"
+
+
+def _ensure_module_phase(phases_by_code: dict[str, dict], module: str) -> dict:
+    code = _module_phase_code(module)
+    if code in phases_by_code:
+        return phases_by_code[code]
+    phase = {
+        "kind": "phase",
+        "code": code,
+        "parent_code": None,
+        "title": _MODULE_PHASE_TITLES.get(module, f"Modulo {module}"),
+        "status_local": "pending",
+        "percent_done": 0,
+        "state": "gep1",
+        "plan_start": None,
+        "plan_end": None,
+        "real_start": None,
+        "real_end": None,
+        "temporal_source": "pack-module",
+        "confidence": 0.85,
+        "source_repos": [],
+        "sources": [{"kind": "pack", "path": f"module:{module}"}],
+        "module": module,
+        "pack_generated": True,
+    }
+    phases_by_code[code] = phase
+    return phase
+
+
+def build_package_content(
+    atoms: list[dict],
+    *,
+    module: str,
+    effort_min: float,
+    max_atoms: int = DEFAULT_PACK_CONTENT_MAX_ATOMS,
+    max_len: int = DEFAULT_CONTENT_MAX,
+) -> str:
+    """Content do pacote P: metadados + checklist de átomos + fontes resumidas."""
+    lines = [
+        f"Nivel: pacote (P) | Modulo: {module} | Atomos: {len(atoms)} | "
+        f"Esforco: {int(round(effort_min))} min",
+        "Hierarquia: Fase(S) → Pacote(P) → atomos (somente neste content)",
+        "Atomos:",
+    ]
+    shown = atoms[: max(0, max_atoms)]
+    for a in shown:
+        mark = {"done": "x", "partial": "~", "pending": " "}.get(a.get("status_local") or "", " ")
+        code = a.get("code") or ""
+        prefix = f"`{code}` " if code else ""
+        title = re.sub(r"\s+", " ", (a.get("title") or "").strip())[:160]
+        mins = int(round(atom_duration_minutes(a)))
+        lines.append(f"- [{mark}] {prefix}{title} (~{mins} min)")
+    omitted = len(atoms) - len(shown)
+    if omitted > 0:
+        lines.append(f"- … +{omitted} atomo(s)")
+
+    # fontes únicas
+    lines.append("Fontes:")
+    seen: set[str] = set()
+    n_src = 0
+    for a in atoms:
+        for s in a.get("sources") or []:
+            key = _format_source_line(s)
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"- {key}")
+            n_src += 1
+            if n_src >= DEFAULT_CONTENT_MAX_SOURCES:
+                break
+        if n_src >= DEFAULT_CONTENT_MAX_SOURCES:
+            break
+    extra_src = max(0, len(seen) - n_src)
+    if extra_src:
+        lines.append(f"- … +{extra_src} fonte(s)")
+
+    text = "\n".join(lines)
+    if max_len > 0 and len(text) > max_len:
+        text = text[: max_len - 20].rstrip() + "\n… [truncado]"
+    return text
+
+
+def _synthesize_package_title(atoms: list[dict], module: str, day: str) -> str:
+    first = re.sub(r"\s+", " ", (atoms[0].get("title") or "").strip())
+    first = re.sub(r"^(\*\*)?\d+(\.\d+)*[a-z]?(\*\*)?\s*", "", first)
+    first = first[:70].rstrip(" .;,:")
+    n = len(atoms)
+    if n == 1:
+        return f"[{module}] {first}"[:255]
+    return f"[{module}] {first} (+{n - 1} atomos, {day})"[:255]
+
+
+def pack_candidates(
+    cands: list[dict],
+    *,
+    target_min: int = DEFAULT_PACK_TARGET_MIN,
+    gap_min: int = DEFAULT_PACK_GAP_MIN,
+    atom_clamp_min: int = DEFAULT_PACK_ATOM_CLAMP_MIN,
+) -> tuple[list[dict], list[dict], dict]:
+    """Consolida itens em pacotes ~target_min.
+
+    Retorna (candidatos_apply, atoms_audit, pack_meta).
+    Candidatos apply = fases (originais + M.*) + pacotes (kind=item).
+    Átomos ficam só no content dos pacotes e no array atoms do relatório.
+    """
+    phases = [json.loads(json.dumps(c)) for c in cands if c.get("kind") == "phase"]
+    items = [json.loads(json.dumps(c)) for c in cands if c.get("kind") != "phase"]
+
+    phases_by_code: dict[str, dict] = {
+        (p.get("code") or "").upper(): p for p in phases if p.get("code")
+    }
+    module_phases_added: list[str] = []
+
+    work: list[dict] = []
+    noise: list[dict] = []
+    for it in items:
+        it["module"] = infer_module(it)
+        it["duration_minutes"] = atom_duration_minutes(it, clamp_min=atom_clamp_min)
+        it["level"] = "atom"
+        if is_noise_atom(it):
+            it["noise"] = True
+            noise.append(it)
+        else:
+            it["noise"] = False
+            work.append(it)
+
+    # ruído → pacotes OPS por módulo/dia (não ProjectTask individuais)
+    noise_by_key: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for n in noise:
+        end = _parse_dt(n.get("real_end") or n.get("plan_end") or n.get("plan_start"))
+        day = end.date().isoformat() if end else "nodate"
+        noise_by_key[(n["module"], day)].append(n)
+
+    # Chave: modulo + pai + dia (arquivos distintos no mesmo contexto entram juntos)
+    buckets: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for it in work:
+        module = it["module"]
+        parent = (it.get("parent_code") or "").upper().strip()
+        if not parent or parent not in phases_by_code:
+            phase = _ensure_module_phase(phases_by_code, module)
+            if phase["code"] not in module_phases_added and phase.get("pack_generated"):
+                module_phases_added.append(phase["code"])
+            parent = phase["code"]
+            it["parent_code"] = parent
+        end = _parse_dt(it.get("real_end") or it.get("plan_end") or it.get("plan_start"))
+        day = end.date().isoformat() if end else "nodate"
+        buckets[(module, parent, day)].append(it)
+
+    packages: list[dict] = []
+    pack_seq: dict[str, int] = defaultdict(int)
+
+    def flush_group(module: str, parent: str, day: str, group: list[dict]) -> None:
+        if not group:
+            return
+        pack_seq[parent] += 1
+        seq = pack_seq[parent]
+        effort = sum(float(a.get("duration_minutes") or 0) for a in group)
+        st, pct, state = _status_from_atoms(group)
+        starts = [_parse_dt(a.get("real_start") or a.get("plan_start")) for a in group]
+        ends = [_parse_dt(a.get("real_end") or a.get("plan_end")) for a in group]
+        starts_v = [d for d in starts if d]
+        ends_v = [d for d in ends if d]
+        # código: 1 átomo com code estável → preserva; senão PARENT.PKGn (evita colidir com S.Pn do plano)
+        if len(group) == 1 and group[0].get("code"):
+            code = str(group[0]["code"]).upper()
+        else:
+            code = f"{parent}.PKG{seq}"
+        title = _synthesize_package_title(group, module, day)
+        repos: set[str] = set()
+        sources: list[dict] = []
+        for a in group:
+            repos.update(a.get("source_repos") or [])
+            sources.extend(a.get("sources") or [])
+        atom_refs = []
+        for a in group:
+            atom_refs.append(
+                {
+                    "title": a.get("title"),
+                    "code": a.get("code"),
+                    "status_local": a.get("status_local"),
+                    "percent_done": a.get("percent_done"),
+                    "duration_minutes": a.get("duration_minutes"),
+                    "plan_start": a.get("plan_start"),
+                    "plan_end": a.get("plan_end"),
+                    "real_start": a.get("real_start"),
+                    "real_end": a.get("real_end"),
+                    "sources": a.get("sources") or [],
+                }
+            )
+            a["packed_into"] = code
+        pkg = {
+            "kind": "item",
+            "level": "package",
+            "code": code,
+            "parent_code": parent,
+            "title": title,
+            "status_local": st,
+            "percent_done": pct,
+            "state": state,
+            "plan_start": _fmt_dt(min(starts_v)) if starts_v else None,
+            "plan_end": _fmt_dt(max(ends_v)) if ends_v else None,
+            "real_start": _fmt_dt(min(starts_v)) if starts_v and st != "pending" else (
+                _fmt_dt(min(starts_v)) if starts_v and state == "gep7" else None
+            ),
+            "real_end": _fmt_dt(max(ends_v)) if ends_v and st == "done" else None,
+            "temporal_source": "pack",
+            "confidence": max(float(a.get("confidence") or 0.8) for a in group),
+            "source_repos": sorted(repos),
+            "sources": sources[:50],
+            "module": module,
+            "effort_minutes": int(round(effort)),
+            "atom_count": len(group),
+            "atoms": atom_refs,
+            "estimated_minutes": int(round(effort)),
+        }
+        # datas reais: se há done/partial com janela
+        if starts_v and st in ("done", "partial"):
+            pkg["real_start"] = _fmt_dt(min(starts_v))
+        if ends_v and st == "done":
+            pkg["real_end"] = _fmt_dt(max(ends_v))
+        if not pkg.get("plan_start") and pkg.get("real_start"):
+            pkg["plan_start"] = pkg["real_start"]
+        if not pkg.get("plan_end") and pkg.get("real_end"):
+            pkg["plan_end"] = pkg["real_end"]
+        elif not pkg.get("plan_end") and ends_v:
+            pkg["plan_end"] = _fmt_dt(max(ends_v))
+        packages.append(pkg)
+
+    for (module, parent, day), lst in sorted(buckets.items()):
+        lst = sorted(lst, key=_atom_sort_key)
+        cur: list[dict] = []
+        cur_mins = 0.0
+        prev_end: datetime | None = None
+
+        def _flush() -> None:
+            nonlocal cur, cur_mins, prev_end
+            flush_group(module, parent, day, cur)
+            cur = []
+            cur_mins = 0.0
+            prev_end = None
+
+        for atom in lst:
+            d = float(atom.get("duration_minutes") or 0)
+            start = _parse_dt(atom.get("real_start") or atom.get("plan_start"))
+            end = _parse_dt(atom.get("real_end") or atom.get("plan_end"))
+            gap_break = bool(
+                prev_end and start and (start - prev_end).total_seconds() / 60.0 > gap_min and cur
+            )
+            cap_break = bool(cur and cur_mins >= target_min and d > 15)
+            if gap_break or cap_break:
+                _flush()
+            cur.append(atom)
+            cur_mins += d
+            if end:
+                prev_end = end
+            elif start:
+                prev_end = start + timedelta(minutes=d)
+        if cur:
+            _flush()
+
+    # pacotes de ruído (processo) sob M.OPS ou módulo
+    for (module, day), lst in sorted(noise_by_key.items()):
+        if not lst:
+            continue
+        phase = _ensure_module_phase(phases_by_code, module)
+        if phase["code"] not in module_phases_added and phase.get("pack_generated"):
+            module_phases_added.append(phase["code"])
+        for a in lst:
+            a["parent_code"] = phase["code"]
+            a["packed_into"] = f"{phase['code']}.OPS"
+        # um pacote OPS por módulo/dia
+        flush_group(module, phase["code"], day, lst)
+        # renomear último pacote para deixar claro
+        if packages:
+            packages[-1]["title"] = f"[{module}] checklist operacional ({day}, {len(lst)} itens)"[:255]
+            packages[-1]["code"] = f"{phase['code']}.OPS.{day.replace('-', '')[-6:]}"
+            packages[-1]["noise_package"] = True
+
+    # enriquecer fases módulo com datas dos pacotes
+    all_phases = list(phases_by_code.values())
+    enrich_phase_dates_from_children(all_phases + packages)
+
+    # ordenar
+    def _cand_key(x: dict):
+        return (
+            0 if x.get("kind") == "phase" else 1,
+            x.get("parent_code") or "",
+            x.get("code") or "",
+            x.get("title") or "",
+        )
+
+    apply_cands = sorted(all_phases + packages, key=_cand_key)
+    atoms_audit = work + noise
+    effort_total = sum(float(p.get("effort_minutes") or 0) for p in packages)
+    meta = {
+        "mode": "on",
+        "target_min": target_min,
+        "gap_min": gap_min,
+        "atom_clamp_min": atom_clamp_min,
+        "atoms_total": len(atoms_audit),
+        "atoms_work": len(work),
+        "atoms_noise": len(noise),
+        "packages": len(packages),
+        "phases": len(all_phases),
+        "module_phases_added": sorted(set(module_phases_added)),
+        "effort_minutes_total": int(round(effort_total)),
+        "effort_hours_total": round(effort_total / 60.0, 1),
+        "by_module": {},
+    }
+    by_mod: dict[str, dict] = defaultdict(lambda: {"packages": 0, "atoms": 0, "effort_minutes": 0})
+    for p in packages:
+        m = p.get("module") or "geral"
+        by_mod[m]["packages"] += 1
+        by_mod[m]["atoms"] += int(p.get("atom_count") or 0)
+        by_mod[m]["effort_minutes"] += int(p.get("effort_minutes") or 0)
+    meta["by_module"] = dict(by_mod)
+    return apply_cands, atoms_audit, meta
+
+
+def _finalize_candidate_actions(
+    cands: list[dict],
+    *,
+    project_id: str,
+    existing_names: set[str],
+    existing_codes: set[str],
+) -> None:
+    """Marca NEW/SKIP e monta suggested_glpi (pacotes usam content com átomos)."""
+    for c in cands:
+        name = c["title"]
+        code = (c.get("code") or "").upper()
+        if name.strip().lower() in existing_names or (code and code in existing_codes):
+            c["action"] = "SKIP"
+        else:
+            c["action"] = "NEW"
+        if c.get("level") == "package" and c.get("atoms"):
+            content = build_package_content(
+                [
+                    {
+                        "title": a.get("title"),
+                        "code": a.get("code"),
+                        "status_local": a.get("status_local"),
+                        "percent_done": a.get("percent_done"),
+                        "duration_minutes": a.get("duration_minutes"),
+                        "plan_start": a.get("plan_start"),
+                        "plan_end": a.get("plan_end"),
+                        "real_start": a.get("real_start"),
+                        "real_end": a.get("real_end"),
+                        "sources": a.get("sources") or [],
+                        "estimated_minutes": a.get("duration_minutes"),
+                    }
+                    for a in c["atoms"]
+                ],
+                module=str(c.get("module") or "geral"),
+                effort_min=float(c.get("effort_minutes") or 0),
+            )
+        else:
+            content = build_suggested_content(c)
+        c["suggested_glpi"] = {
+            "project_id": int(project_id) if project_id.isdigit() else project_id,
+            "name": name[:255],
+            "code": c.get("code"),
+            "kind": c.get("kind"),
+            "parent_code": c.get("parent_code"),
+            "percent_done": c["percent_done"],
+            "state": c["state"],
+            "plan_start": c.get("plan_start"),
+            "plan_end": c.get("plan_end"),
+            "real_start": c.get("real_start"),
+            "real_end": c.get("real_end"),
+            "temporal_source": c.get("temporal_source"),
+            "content": content,
+            "module": c.get("module"),
+            "effort_minutes": c.get("effort_minutes"),
+            "atom_count": c.get("atom_count"),
+            "level": c.get("level") or ("phase" if c.get("kind") == "phase" else "item"),
+        }
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Retro-scan hierarquico S/P. Com --pack: Fase→Pacote~2h→atomos no content."
+    )
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--repo-root", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--pack",
+        action="store_true",
+        help="Empacota itens em pacotes ~2h (3 niveis). Sobrescreve GLPI_RETRO_PACK_MODE=off",
+    )
+    ap.add_argument(
+        "--no-pack",
+        action="store_true",
+        help="Desliga empacotamento (1 linha = 1 ProjectTask)",
+    )
+    ap.add_argument("--pack-target-min", type=int, default=None, help="Alvo de minutos por pacote (default 120)")
+    ap.add_argument("--pack-gap-min", type=int, default=None, help="Gap max entre atomos no mesmo pacote (default 45)")
     args = ap.parse_args()
+
+    if args.pack and args.no_pack:
+        print("erro: use --pack ou --no-pack, nao ambos", file=sys.stderr)
+        return 2
+    pack_mode = DEFAULT_PACK_MODE in ("on", "1", "true", "yes")
+    if args.pack:
+        pack_mode = True
+    if args.no_pack:
+        pack_mode = False
+    pack_target = args.pack_target_min if args.pack_target_min is not None else DEFAULT_PACK_TARGET_MIN
+    pack_gap = args.pack_gap_min if args.pack_gap_min is not None else DEFAULT_PACK_GAP_MIN
 
     ws = load_workspace(Path(args.workspace))
     repo_root = Path(args.repo_root)
@@ -1703,78 +2246,111 @@ def main() -> int:
     reconcile_status_for_retro(cands)
     enrich_phase_dates_from_children(cands)
     nullify_real_dates_by_state(cands)
-    for c in cands:
-        name = c["title"]
-        code = (c.get("code") or "").upper()
-        if name.strip().lower() in existing_names or (code and code in existing_codes):
-            c["action"] = "SKIP"
-        else:
-            c["action"] = "NEW"
-        c["suggested_glpi"] = {
-            "project_id": int(project_id) if project_id.isdigit() else project_id,
-            "name": name[:255],
-            "code": c.get("code"),
-            "kind": c.get("kind"),
-            "parent_code": c.get("parent_code"),
-            "percent_done": c["percent_done"],
-            "state": c["state"],
-            "plan_start": c.get("plan_start"),
-            "plan_end": c.get("plan_end"),
-            "real_start": c.get("real_start"),
-            "real_end": c.get("real_end"),
-            "temporal_source": c.get("temporal_source"),
-            "content": build_suggested_content(c),
-        }
+
+    atoms_audit: list[dict] = []
+    pack_meta: dict | None = None
+    if pack_mode:
+        cands, atoms_audit, pack_meta = pack_candidates(
+            cands,
+            target_min=pack_target,
+            gap_min=pack_gap,
+        )
+
+    _finalize_candidate_actions(
+        cands,
+        project_id=project_id,
+        existing_names=existing_names,
+        existing_codes=existing_codes,
+    )
 
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d_%H%M")
     bundle = ws.get("bundle", "workspace")
-    json_path = out_dir / f"{stamp}_{bundle}.json"
-    md_path = out_dir / f"{stamp}_{bundle}.md"
+    suffix = "_pack" if pack_mode else ""
+    json_path = out_dir / f"{stamp}_{bundle}{suffix}.json"
+    md_path = out_dir / f"{stamp}_{bundle}{suffix}.md"
 
     phases = [c for c in cands if c.get("kind") == "phase"]
     items = [c for c in cands if c.get("kind") != "phase"]
+    hierarchy = {
+        "phase_S": "ProjectTask pai (fase / modulo)",
+        "item_P": "ProjectTask filho — pacote ~2h" if pack_mode else "ProjectTask filho (projecttasks_id)",
+        "atom": "Evidencia no content do pacote (nao e ProjectTask)" if pack_mode else None,
+    }
+    if not pack_mode:
+        hierarchy.pop("atom", None)
+
     report = {
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(),
         "bundle": bundle,
         "project_id": project_id,
-        "hierarchy": {"phase_S": "ProjectTask pai", "item_P": "ProjectTask filho (projecttasks_id)"},
+        "hierarchy": hierarchy,
         "mode": "APPLY" if args.apply else "DRY-RUN",
+        "pack": pack_meta or {"mode": "off"},
         "total": len(cands),
         "phases": len(phases),
         "items": len(items),
+        "packages": len(items) if pack_mode else 0,
+        "atoms": len(atoms_audit) if pack_mode else len(items),
         "new": sum(1 for c in cands if c["action"] == "NEW"),
         "skip": sum(1 for c in cands if c["action"] == "SKIP"),
         "candidates": cands,
     }
+    if pack_mode:
+        report["atoms_detail"] = atoms_audit
+
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    hier_label = (
+        "**S = fase** · **P = pacote ~2h** · átomos só no content"
+        if pack_mode
+        else "**S = tarefa pai** · **P = subtarefa filho**"
+    )
     lines = [
-        f"# Retro-scan GLPI hierárquico — {bundle}",
+        f"# Retro-scan GLPI hierárquico — {bundle}" + (" (pack)" if pack_mode else ""),
         "",
         f"- Gerado: `{report['generated_at']}`",
         f"- Projeto GLPI: `{project_id}`",
-        f"- Hierarquia: **S = tarefa pai** · **P = subtarefa filho**",
+        f"- Hierarquia: {hier_label}",
         f"- Modo: **{report['mode']}**",
-        f"- Total: {report['total']} (fases S={report['phases']}, itens P={report['items']}; "
+        f"- Pack: **{(pack_meta or {}).get('mode', 'off')}**"
+        + (
+            f" (alvo={pack_target}min, gap={pack_gap}min; "
+            f"atomos={pack_meta.get('atoms_total')}, pacotes={pack_meta.get('packages')}, "
+            f"esforco≈{pack_meta.get('effort_hours_total')}h)"
+            if pack_meta
+            else ""
+        ),
+        f"- Total apply: {report['total']} (fases S={report['phases']}, "
+        f"{'pacotes' if pack_mode else 'itens'} P={report['items']}; "
         f"NEW={report['new']}, SKIP={report['skip']})",
         "",
-        "| Acao | Kind | Code | Parent | Titulo | Status | Estado | % | Plan ini | Real fim | Conf |",
-        "|------|------|------|--------|--------|--------|--------|---|----------|----------|------|",
+        "| Acao | Kind | Level | Code | Parent | Modulo | Atomos | Min | Titulo | Status | % | Plan ini | Real fim |",
+        "|------|------|-------|------|--------|--------|--------|-----|--------|--------|---|----------|----------|",
     ]
-    for c in cands[:250]:
+    for c in cands[:300]:
         lines.append(
-            f"| {c['action']} | {c.get('kind')} | {c.get('code') or ''} | "
-            f"{c.get('parent_code') or ''} | {c['title'][:40].replace('|', '/')} | "
-            f"{c['status_local']} | {c['state']} | {c['percent_done']} | "
-            f"{(c.get('plan_start') or '')[:10]} | {(c.get('real_end') or '')[:10]} | "
-            f"{c['confidence']:.2f} |"
+            f"| {c['action']} | {c.get('kind')} | {c.get('level') or ('phase' if c.get('kind')=='phase' else 'item')} | "
+            f"{c.get('code') or ''} | {c.get('parent_code') or ''} | {c.get('module') or ''} | "
+            f"{c.get('atom_count') or ''} | {c.get('effort_minutes') or ''} | "
+            f"{c['title'][:36].replace('|', '/')} | {c['status_local']} | {c['percent_done']} | "
+            f"{(c.get('plan_start') or '')[:10]} | {(c.get('real_end') or '')[:10]} |"
         )
+    if pack_meta and pack_meta.get("by_module"):
+        lines.extend(["", "## Esforco por modulo (pacotes)", ""])
+        lines.append("| Modulo | Pacotes | Atomos | Horas |")
+        lines.append("|--------|---------|--------|-------|")
+        for mod, stats in sorted(pack_meta["by_module"].items()):
+            hours = round(stats["effort_minutes"] / 60.0, 1)
+            lines.append(
+                f"| {mod} | {stats['packages']} | {stats['atoms']} | {hours} |"
+            )
     lines.extend(
         [
             "",
             "## Ordem sugerida de apply",
-            "1. Criar/atualizar **pais** (`kind=phase`, `--code=S4`)",
-            "2. Criar/atualizar **filhos** (`--code=S4.P1 --parent-code=S4`)",
+            "1. Criar/atualizar **fases** (`kind=phase`, `--code=S4` ou `M.BACKEND`)",
+            "2. Criar/atualizar **pacotes** (`kind=item`, `--code=S4.P1 --parent-code=S4`)"
+            + (" — átomos já estão no `content`" if pack_mode else ""),
             "",
             "```bash",
             f"./tools/glpi/bin/glpi-retro-apply --from={json_path}",
@@ -1782,23 +2358,24 @@ def main() -> int:
             "```",
             "",
             f"JSON: `{json_path}`",
-            "Doc: `docs/00-GLPI/HIERARQUIA_S_P_GLPI.md`",
+            "Doc: `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`",
             "",
         ]
     )
     md_path.write_text("\n".join(lines), encoding="utf-8")
 
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "markdown": str(md_path),
-                "json": str(json_path),
-                **{k: report[k] for k in ("total", "phases", "items", "new", "skip", "mode")},
-            },
-            ensure_ascii=False,
-        )
-    )
+    out_summary = {
+        "ok": True,
+        "markdown": str(md_path),
+        "json": str(json_path),
+        "pack_mode": "on" if pack_mode else "off",
+        **{k: report[k] for k in ("total", "phases", "items", "new", "skip", "mode")},
+    }
+    if pack_meta:
+        out_summary["packages"] = pack_meta.get("packages")
+        out_summary["atoms"] = pack_meta.get("atoms_total")
+        out_summary["effort_hours"] = pack_meta.get("effort_hours_total")
+    print(json.dumps(out_summary, ensure_ascii=False))
     if args.apply:
         print(
             "AVISO: --apply no retro-scan apenas marca o relatorio; "
@@ -1811,3 +2388,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

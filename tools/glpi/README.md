@@ -18,11 +18,13 @@ O `retro-scan` preenche datas a partir de **commits** e de **checklists/planos s
 - status: `[x]`/`done` → `gep7`; `[~]` → `gep3`; `[ ]` → `gep1`; só commit → `gep7` (retro)
 - **após GEP:** `gep1` zera `real_start`/`real_end`; `gep3` zera `real_end` — **exceto** timestamps confirmados (`temporal_source` `plan` / `checklist-comment`)
 - **content (ProjectTask):** inclui `Repos:` (ids do workspace) + lista resumida de `Fontes:` (kind/path/repo); teto `GLPI_RETRO_CONTENT_MAX` (default 4000) e `GLPI_RETRO_CONTENT_MAX_SOURCES` (default 12)
+- **`--pack` (3 níveis):** Fase(S) → Pacote(P ~2h, código `….PKG{n}` se multi-átomo) → átomos só no `content`; saída `*_pack.json`
 
 ```bash
 ./tools/glpi/glpi retro-scan
+./tools/glpi/glpi retro-scan --pack --pack-target-min=120
 # dry-run do apply (não grava GLPI):
-./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
+./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO_pack.json
 ```
 
 ## Documentos (anexo)
@@ -49,7 +51,7 @@ Config: `.glpi/instance.yaml` + `.glpi/project.yaml`
 
 ## Wrappers (`tools/glpi/bin/`)
 
-`glpi-followup` · `glpi-seed-phases` · `glpi-task-upsert` · `glpi-retro-scan` · `glpi-retro-apply` · `glpi-project-create` · `glpi-document-attach`
+`acompanhar-chamado` (CLI `glpi-followup`) · `glpi-seed-phases` · `glpi-task-upsert` · `glpi-retro-scan` · `glpi-retro-apply` · `glpi-project-create` · `glpi-document-attach`
 
 ## Secrets
 

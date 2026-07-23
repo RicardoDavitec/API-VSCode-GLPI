@@ -1,6 +1,6 @@
 ---
 name: glpi-retro-scan
-description: "Levanta candidatos hierárquicos S(pai)/P(filho) a ProjectTask a partir de planos/checklists (mono/polyrepo)."
+description: "Levanta candidatos hierárquicos S(fase)/P(pacote~2h) a ProjectTask a partir de planos/checklists (mono/polyrepo). Com --pack, átomos ficam só no content."
 ---
 
 # Skill: glpi-retro-scan
@@ -13,11 +13,25 @@ Varre `.glpi/workspace.yaml` e gera relatório de candidatos (dedupe por código
 
 ```bash
 ./tools/glpi/bin/glpi-retro-scan
-# equivalente:
-./tools/glpi/glpi retro-scan
+./tools/glpi/glpi retro-scan --pack --pack-target-min=120
 ```
 
-Saída: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`).
+Saída:
+
+- sem pack: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`)
+- com `--pack`: `…_<bundle>_pack.md` (+ `.json`) — **não sobrescreve** artefato anterior
+
+## Três níveis (`--pack`)
+
+| Nível | GLPI | Papel |
+|-------|------|--------|
+| Fase (S) | ProjectTask pai | Sprint/fase ou módulo `M.BACKEND` |
+| Pacote (P) | ProjectTask filho | Unidade ~2h (default 120 min) |
+| Átomo | só no `content` | Linha de checklist/commit (evidência) |
+
+JSON inclui `pack` (estatísticas), `candidates` (fases+pacotes para apply) e `atoms_detail` (auditoria).
+
+Env: `GLPI_RETRO_PACK_MODE=on`, `GLPI_RETRO_PACK_TARGET_MIN`, `GLPI_RETRO_PACK_GAP_MIN`.
 
 ## Datas e GEP no JSON
 
@@ -26,25 +40,36 @@ Saída: `docs/06_glpi/retro-scans/YYYY-MM-DD_HHMM_<bundle>.md` (+ `.json`).
   - `gep3` (em andamento) → `real_end = null` (exceto `temporal_source` confirmado: `plan`, `checklist-comment`)
   - `gep1` (não iniciado) → `real_start` e `real_end` = `null` (mesma exceção)
 - `gep7` (feito) mantém as datas inferidas ou confirmadas.
+- Com pack: datas do pacote = min/max dos átomos; `%` agregado.
 
 ## Conteúdo sugerido (GLPI)
 
-`suggested_glpi.content` traz procedência polyrepo:
+Sem pack — procedência polyrepo:
 
 ```text
 Hierarquia: kind=… code=… parent=…
 Repos: Bot_Pan, Bot_Pan_Cursor
 Fontes:
 - plan docs/…/PLANO_….md:110
-- commit @ Bot_Pan abc1234 …
 ```
 
-Limites: `GLPI_RETRO_CONTENT_MAX` (4000) · `GLPI_RETRO_CONTENT_MAX_SOURCES` (12).
+Com pack — checklist de átomos:
 
-## Pós-scan (apply pai→filho)
+```text
+Nivel: pacote (P) | Modulo: web | Atomos: 7 | Esforco: 118 min
+Atomos:
+- [x] Implementar mapa …
+- [ ] Clustering …
+Fontes:
+- …
+```
+
+Limites: `GLPI_RETRO_CONTENT_MAX` (4000) · `GLPI_RETRO_CONTENT_MAX_SOURCES` (12) · `GLPI_RETRO_PACK_CONTENT_MAX_ATOMS` (40).
+
+## Pós-scan (apply fase→pacote)
 
 ```bash
-./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO.json
+./tools/glpi/bin/glpi-retro-apply --from=docs/06_glpi/retro-scans/ARQUIVO_pack.json
 ./tools/glpi/bin/glpi-retro-apply --from=... --kinds=phase --limit=8
 ./tools/glpi/bin/glpi-retro-apply --from=... --apply   # após revisão
 ```
@@ -54,8 +79,8 @@ Limites: `GLPI_RETRO_CONTENT_MAX` (4000) · `GLPI_RETRO_CONTENT_MAX_SOURCES` (12
 O scan **não** grava no GLPI. Depois de revisar o `.md`/`.json`, opcionalmente anexar ao Project ou Ticket:
 
 ```bash
-./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO.md --project
-./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO.md --ticket --apply
+./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO_pack.md --project
+./tools/glpi/bin/glpi-document-attach --file=docs/06_glpi/retro-scans/ARQUIVO_pack.md --ticket --apply
 ```
 
 ## Referências

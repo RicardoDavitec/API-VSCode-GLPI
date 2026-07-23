@@ -32,10 +32,11 @@ Comandos:
                            ProjectTask (dry-run por padrao)
   seed-phases [project_id] [--apply] [--template=samu-s-phases|corporate-phases]
                            Seed ProjectTasks (pais S0–S7 ou template corporativo)
-  retro-scan [--workspace=PATH]
-                           Levantamento S(pai)/P(filho); gera JSON/MD
+  retro-scan [--workspace=PATH] [--pack|--no-pack]
+             [--pack-target-min=120] [--pack-gap-min=45]
+                           Levantamento S(fase)/P(pacote~2h); gera JSON/MD
   retro-apply --from=JSON [--apply] [--kinds=phase,item] [--limit=N]
-                           Aplica candidatos do scan em ordem pai→filho
+                           Aplica candidatos do scan em ordem fase→pacote
   states discover [--apply] [--preset=NOME] [--out=ARQUIVO]
                            Descobre ProjectState via API e gera maps/states.json
   document attach --file=PATH [--itemtype=Ticket|ProjectTask|Project]
@@ -843,14 +844,21 @@ cmd_states_discover() {
 }
 
 cmd_retro_scan() {
-  local workspace="${REPO_ROOT}/.glpi/workspace.yaml" apply=0 arg
+  local workspace="${REPO_ROOT}/.glpi/workspace.yaml" apply=0 pack=0 nopack=0
+  local pack_target="" pack_gap="" arg
   for arg in "$@"; do
     case "$arg" in
       --apply) apply=1 ;;
+      --pack) pack=1 ;;
+      --no-pack) nopack=1 ;;
+      --pack-target-min=*) pack_target="${arg#--pack-target-min=}" ;;
+      --pack-gap-min=*) pack_gap="${arg#--pack-gap-min=}" ;;
       --workspace=*) workspace="${arg#--workspace=}" ;;
       -h|--help)
-        echo "Uso: glpi retro-scan [--workspace=.glpi/workspace.yaml]"
-        echo "  Gera JSON/MD. Para gravar no GLPI: glpi retro-apply --from=JSON [--apply]"
+        echo "Uso: glpi retro-scan [--workspace=.glpi/workspace.yaml] [--pack|--no-pack]"
+        echo "  [--pack-target-min=120] [--pack-gap-min=45]"
+        echo "  Gera JSON/MD. Com --pack: Fase(S) → Pacote(P ~2h) → atomos no content."
+        echo "  Para gravar no GLPI: glpi retro-apply --from=JSON [--apply]"
         return 0
         ;;
       *) die "flag desconhecida: $arg" ;;
@@ -861,6 +869,10 @@ cmd_retro_scan() {
   local out_dir="${REPO_ROOT}/docs/06_glpi/retro-scans"
   local args=(--workspace "$workspace" --repo-root "$REPO_ROOT" --out-dir "$out_dir")
   [[ "$apply" -eq 1 ]] && args+=(--apply)
+  [[ "$pack" -eq 1 ]] && args+=(--pack)
+  [[ "$nopack" -eq 1 ]] && args+=(--no-pack)
+  [[ -n "$pack_target" ]] && args+=(--pack-target-min "$pack_target")
+  [[ -n "$pack_gap" ]] && args+=(--pack-gap-min "$pack_gap")
   python3 "${SCRIPT_DIR}/lib/retro_scan.py" "${args[@]}"
 }
 
