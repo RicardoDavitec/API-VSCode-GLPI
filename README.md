@@ -65,6 +65,7 @@ python3 scripts/install_glpi.py --discover-only --target=~/projetos/meu-app --ye
 | `scripts/install-glpi.sh` | Assistente bash (interativo + flags) |
 | `scripts/install_glpi.py` | Assistente Python (wizard + discover) |
 | `scripts/upgrade-into.sh` | Atualiza tools/skills/docs sem apagar a config do produto |
+| `scripts/atualizar-kit` / `atualizar_kit.py` | Verifica updates do kit e sincroniza no produto |
 
 Cada projeto **vendoriza** uma cópia local. Não execute o CLI de outro clone.
 
@@ -408,10 +409,25 @@ Na **raiz do produto**:
 
 ## 14. Atualizar o kit no projeto
 
+Do **produto** (recomendado — skill `atualizar-kit`):
+
+```bash
+./scripts/atualizar-kit --check-only
+./scripts/atualizar-kit --profile=full-skeleton --yes
+# opcional: atualizar o clone do kit antes
+./scripts/atualizar-kit --pull-kit --profile=full-skeleton --yes
+```
+
+Ou a partir do clone do kit:
+
 ```bash
 cd ~/projetos/pmf-dev-kit && git pull
 ./scripts/upgrade-into.sh /caminho/do/produto --profile=pmf-core
+# equivalente:
+./scripts/atualizar-kit --target=/caminho/do/produto --profile=pmf-core --yes
 ```
+
+Scripts: `scripts/atualizar-kit` · `scripts/atualizar_kit.py` · path do kit em `.glpi/kit.yaml`.
 
 ---
 
@@ -455,7 +471,7 @@ cd ~/projetos/pmf-dev-kit && git pull
 | Hierarquia S/P | [`docs/06_glpi/HIERARQUIA_S_P_GLPI.md`](docs/06_glpi/HIERARQUIA_S_P_GLPI.md) |
 | CLI | [`tools/glpi/`](tools/glpi/) |
 | Assistentes | [`scripts/install-glpi.sh`](scripts/install-glpi.sh) · [`scripts/install_glpi.py`](scripts/install_glpi.py) |
-| Bootstrap / Upgrade | [`scripts/bootstrap-into.sh`](scripts/bootstrap-into.sh) · [`scripts/upgrade-into.sh`](scripts/upgrade-into.sh) |
+| Bootstrap / Upgrade | [`scripts/bootstrap-into.sh`](scripts/bootstrap-into.sh) · [`scripts/upgrade-into.sh`](scripts/upgrade-into.sh) · [`scripts/atualizar-kit`](scripts/atualizar-kit) |
 | Autoria e citação | [`AUTHORS.md`](AUTHORS.md) · [`CITATION.bib`](CITATION.bib) |
 | Licença | [`LICENSE`](LICENSE) (MIT) |
 

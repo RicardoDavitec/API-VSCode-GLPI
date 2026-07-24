@@ -2,6 +2,14 @@
 
 Plano de implementação, checklists de commit, sessões (`SESSAO_AAAA-MM-DD_*`).
 
+**Planos novos (skill `documente-o-plano`):**
+
+```text
+docs/05_progresso/<modulo>/<nome_do_plano>-DD_MM_AA-hh_mm.md
+```
+
+Modulo = `geral` | pasta monorepo | modulo externo. Hierarquia S/P + comentarios `<!-- glpi: ... -->`.
+
 ## Sessões recentes
 
 | Data | Arquivo |

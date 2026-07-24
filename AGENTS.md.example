@@ -10,13 +10,16 @@
 4. Ideias extras (máximo 2)
 
 ## Skills recomendados
-- commit, documentar, encerrar-sessao, backup
+- commit, documentar, documente-o-plano, encerrar-sessao, backup
 - acompanhar-chamado (alias glpi-followup), glpi-task-upsert, glpi-retro-scan
-- exporte, importe, atualizar
+- exporte, importe, atualizar, atualizar-kit
 
 ## Padrão de commit
 `<gitmoji> <tipo>(<escopo>): <mensagem-em-pt-br-sem-acentos>_DD-MM-AA_hh-mm`
 
 ## Docs
-- Plano: `docs/05_progresso/geral/PLANO_IMPLEMENTACAO.md`
+- Planos: `docs/05_progresso/<modulo>/<nome>-DD_MM_AA-hh_mm.md` (skill `documente-o-plano`)
+- Plano legado/central: `docs/05_progresso/geral/PLANO_IMPLEMENTACAO.md`
+- Requisitos: `docs/01_requisitos/` (obrigatório alinhar planos)
 - GLPI: `docs/06_glpi/`
+- Sync kit: `./scripts/atualizar-kit`

@@ -102,7 +102,8 @@ echo "Key:     $KEY"
 echo
 
 # Sempre: tools/glpi
-copy_tree "$KIT_ROOT/tools/glpi" "$TARGET/tools/glpi"
+rsync -a --exclude '__pycache__/' --exclude '*.pyc' \
+  "$KIT_ROOT/tools/glpi/" "$TARGET/tools/glpi/"
 chmod +x "$TARGET/tools/glpi/glpi" "$TARGET/tools/glpi/bin/"* 2>/dev/null || true
 
 # Presets + instance
@@ -150,13 +151,15 @@ install_skill() {
 
 case "$PROFILE" in
   glpi-only)
-    for s in acompanhar-chamado glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
+    for s in acompanhar-chamado glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan \
+             documente-o-plano atualizar-kit; do
       install_skill "$s"
     done
     ;;
   pmf-core|full-skeleton)
-    for s in commit documentar exporte importe atualizar backup encerrar-sessao oncoto-oncovo \
-             acompanhar-chamado glpi-followup glpi-task-upsert glpi-project-create glpi-retro-scan; do
+    for s in commit documentar documente-o-plano exporte importe atualizar atualizar-kit backup \
+             encerrar-sessao oncoto-oncovo acompanhar-chamado glpi-followup glpi-task-upsert \
+             glpi-project-create glpi-retro-scan; do
       install_skill "$s"
     done
     cp "$KIT_ROOT/.github/skills/GUIA_USO_SKILLS.md" "$TARGET/.github/skills/GUIA_USO_SKILLS.md"
@@ -172,6 +175,23 @@ case "$PROFILE" in
     exit 1
     ;;
 esac
+
+# Wrapper atualizar-kit em todos os perfis (delega ao clone fonte)
+mkdir -p "$TARGET/scripts"
+cat >"$TARGET/scripts/atualizar-kit" <<WRAP
+#!/usr/bin/env bash
+# Wrapper local — delega ao pmf-dev-kit.
+set -euo pipefail
+KIT="${KIT_ROOT}"
+TARGET="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "\$KIT/scripts/atualizar_kit.py" --kit="\$KIT" --target="\$TARGET" "\$@"
+WRAP
+chmod +x "$TARGET/scripts/atualizar-kit"
+mkdir -p "$TARGET/.glpi"
+if [[ ! -f "$TARGET/.glpi/kit.yaml" ]]; then
+  printf '# Caminho do repositorio fonte pmf-dev-kit\npath: %s\n' "$KIT_ROOT" \
+    >"$TARGET/.glpi/kit.yaml"
+fi
 
 if [[ "$PROFILE" == "full-skeleton" ]]; then
   for d in 00_visao_geral 01_requisitos 02_arquitetura 03_implementacao 04_operacao \
