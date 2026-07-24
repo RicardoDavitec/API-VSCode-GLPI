@@ -9,6 +9,7 @@
 | oncoto-oncovo | Situação do plano |
 | commit / documentar | Padrão de commit e docs pontuais |
 | **documente-o-plano** | Cria plano S/P com timestamps GLPI em `docs/05_progresso/<modulo>/` |
+| **inserir-pendencia** | Pendência atemporal em `docs/05_progresso/pendencias/CHECKLIST_PENDENCIAS.md` (módulo + timestamp) |
 | **acompanhar-chamado** | ITILFollowup no Ticket (título sugerido + edição/default; anexo opcional) |
 | glpi-followup | Alias **deprecated** → `acompanhar-chamado` |
 | glpi-task-upsert | ProjectTask S/P (`--attach=arquivo` opcional) |
