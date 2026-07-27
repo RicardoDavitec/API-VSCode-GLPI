@@ -25,7 +25,8 @@ Publica o trabalho local no repositorio remoto: status → commit (se necessario
    - Se working tree limpa e branch **ahead**: pular para push (passo 4).
    - Se houver alteracoes: `git diff --stat`; nao incluir `.env`, credenciais ou secrets.
 3. **Commit** (quando necessario)
-   - `git add` nos arquivos relevantes.
+   - Seguir skill `commit` (**gate de planos S/P** se a entrega avanca/conclui `Sn`/`Sn.Pm`).
+   - `git add` nos arquivos relevantes **incluindo** `.md` de plano atualizados.
    - Mensagem no padrao `AGENTS.md` / skill `commit`: `<gitmoji> <tipo>(<escopo>): <descricao>_DD-MM-AA_hh-mm`
    - Confirmar uma vez com o usuario; commitar.
 4. **Pre-push**
@@ -39,7 +40,7 @@ Publica o trabalho local no repositorio remoto: status → commit (se necessario
 ## Regras essenciais
 
 - Branch alvo: sempre o branch **atual** (`git branch --show-current`).
-- Branch de trabalho padrao SAMU: `teste-sigs-samu-operacional`.
+- Branch de trabalho: o definido no `AGENTS.md` / `FLUXO_BRANCHES_AMBIENTES.md` do **produto** (ex. SAMU: `teste-sigs-samu-operacional`).
 - Nao inventar arquivos no commit; nao commitar secrets.
 - Se push falhar por autenticacao: orientar credencial Gitness/HTTPS (sem alterar `git config` global).
 

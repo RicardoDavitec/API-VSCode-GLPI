@@ -3,10 +3,13 @@
 Checklist antes de considerar a entrega fechada:
 
 - [ ] Rodar build/teste da app alterada
-- [ ] Atualizar checklist da fase em `PLANO_IMPLEMENTACAO.md` se aplicável
-  (ID `Sn.Pm`, Status, `%`, Plan/Real ini/fim, GEP)
-- [ ] Commit no padrão AGENTS.md
-- [ ] Push para branch de trabalho → merge em `teste-sigs-samu-operacional` (ver `FLUXO_BRANCHES_AMBIENTES.md`)
+- [ ] **Atualizar planos S/P** (obrigatorio se a entrega avanca/conclui `Sn` / `Sn.Pm`) — skill `commit`:
+  - `docs/05_progresso/geral/PLANO_IMPLEMENTACAO.md` (ID, Status, `%`, Plan/Real, GEP)
+  - plano de modulo em `docs/05_progresso/<modulo>/` se existir
+  - comentarios `<!-- glpi: real_start/real_end -->` quando o plano usar o formato kit
+- [ ] Incluir os `.md` de plano no mesmo commit da entrega (preferencial)
+- [ ] Commit no padrão AGENTS.md / skill `commit`
+- [ ] Push para branch de trabalho do produto (ver `FLUXO_BRANCHES_AMBIENTES.md`)
 - [ ] Promover teste → homologa → `main` conforme checklist do ambiente
 - [ ] follow-up GLPI enviado?
 - [ ] ProjectTask atualizada? (pai S e/ou filho P — skill `glpi-task-upsert`)
@@ -20,14 +23,15 @@ A ProjectTask fecha o ciclo **plano local (S/P) ↔ gestão de entrega** no Proj
 ./tools/glpi/glpi ticket followup - "[S4.P5] resumo da entrega + commit/sha + proximo passo"
 ```
 
-Skills: `.github/skills/glpi-task-upsert/SKILL.md`, `.github/skills/acompanhar-chamado/SKILL.md` (alias: `glpi-followup`).  
+Skills: `.github/skills/commit/SKILL.md`, `.github/skills/glpi-task-upsert/SKILL.md`, `.github/skills/acompanhar-chamado/SKILL.md` (alias: `glpi-followup`).  
 Hierarquia: `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`.
 
 ## Comandos rápidos
 
 ```bash
-npm run build:backend
-npm run build:web
-curl http://localhost:3700/health
+# Ajuste aos scripts do produto
+npm run build:backend   # se existir
+npm run build:web       # se existir
+curl http://localhost:3700/health   # se API local
 ./tools/glpi/glpi ticket get
 ```

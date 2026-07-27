@@ -7,7 +7,7 @@
 | backup | Cópia de segurança |
 | encerrar-sessao | `SESSAO_*` em `docs/05_progresso/geral/` (+ anexo GLPI opcional) |
 | oncoto-oncovo | Situação do plano |
-| commit / documentar | Padrão de commit e docs pontuais |
+| commit / documentar | Commit com **gate de plano S/P**; docs pontuais |
 | **documente-o-plano** | Cria plano S/P com timestamps GLPI em `docs/05_progresso/<modulo>/` |
 | **inserir-pendencia** | Pendência atemporal em `docs/05_progresso/pendencias/CHECKLIST_PENDENCIAS.md` (módulo + timestamp) |
 | **acompanhar-chamado** | ITILFollowup no Ticket (título sugerido + edição/default; anexo opcional) |
