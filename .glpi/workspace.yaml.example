@@ -1,10 +1,15 @@
-bundle: meu-produto
+bundle: meu-bundle
+schema: 2
 glpi:
-  ticket_id: 0
-  project_id: 0
+  project_id: null
+  hierarchy_file: hierarchy.yaml
+  model_file: model.defaults.yaml
+  phase_map: maps/phase-map.json
+scan:
+  with_git: true
+  default_phase_when_ambiguous: "?"   # "?" bloqueia --apply (regra V10)
+  dedupe_variants: true
 repos:
-  - id: meu-produto
-    path: /caminho/absoluto/do/clone
-    role: primary
-    weight: 1.0
-scanners: [plan, checklist, todolist, commit, branch]
+  - { id: repo-principal, path: /caminho/repo, role: primary,    weight: 1.0, phase_hint: F2 }
+  - { id: repo-variante,  path: /caminho/var,  role: variant,    weight: 0.7, phase_hint: F2 }
+  - { id: repo-antigo,    path: /caminho/old,  role: historical, weight: 0.6, phase_hint: F1 }

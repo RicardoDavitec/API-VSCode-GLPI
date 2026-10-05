@@ -1,0 +1,19 @@
+{
+  "comment": "Mapa phi: fases LEGADAS desta instituicao -> 5 fases canonicas F1..F5. Relacao muitos-para-um (nao injetiva): a volta e proibida (legacy.reverse_policy=forbid). Use 'demote_to' para rebaixar a distincao perdida ao nivel S.",
+  "schema": 2,
+  "layer": "example",
+  "forward": {
+    "<codigo-legado>": {
+      "to": "F2",
+      "label_legacy": "<nome exato da fase legada>",
+      "demote_to": "F2.S1",
+      "note": "explique a perda de informacao"
+    }
+  },
+  "new_without_legacy": ["F3"],
+  "legacy_project_ids": {
+    "comment": "IDs reais desta instancia. PREENCHER NO PRODUTO, nunca no kit.",
+    "parent": null
+  },
+  "reverse_policy": "forbid"
+}

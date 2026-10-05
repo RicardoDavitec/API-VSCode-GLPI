@@ -1,0 +1,56 @@
+# Template NEUTRO das 5 fases. Preset/produto podem renomear via overlay.
+template_id: lifecycle-5-phases
+schema: 2
+layer: kit
+creates: auto                  # auto = respeita topology.phase_as
+defaults:
+  state_role: todo
+  priority: 3
+  is_milestone: 1
+naming:
+  root:  "{produto}"
+  phase: "{code}. {nome}"
+phases:
+  - code: F1
+    name: "Planejamento"
+    alias: PLAN
+    weight: 0.10
+    content: |
+      Fase F1 — Planejamento.
+      Levantamento, requisitos, regras de negocio e desenho de solucao.
+      S = ciclos de levantamento · P = commits de doc/plano/spec.
+      Entregaveis: docs/01_requisitos, plano vigente em planos_ativos.
+  - code: F2
+    name: "Implementacao"
+    alias: IMPL
+    weight: 0.40
+    content: |
+      Fase F2 — Implementacao.
+      Construcao do software (front-end, back-end, integracoes).
+      S = sprint/semana · P = commit (feat/fix/refactor/perf).
+  - code: F3
+    name: "Testes Internos"
+    alias: TINT
+    weight: 0.20
+    content: |
+      Fase F3 — Testes Internos.
+      Unitario, integracao, carga e regressao pela propria equipe,
+      ANTES de expor ao usuario-chave. Estado operacional: testing.
+      S = rodadas de teste · P = commits test/ci + relatorios de pipeline.
+  - code: F4
+    name: "Homologacao"
+    alias: HOMO
+    weight: 0.20
+    content: |
+      Fase F4 — Homologacao.
+      Validacao com usuario-chave/area demandante em ambiente de homologacao.
+      S = rodadas de homologacao · P = itens de ata e ajustes.
+  - code: F5
+    name: "Aprovacao"
+    alias: APRO
+    weight: 0.10
+    content: |
+      Fase F5 — Aprovacao.
+      Termo de aceite, publicacao em producao, transferencia a sustentacao.
+      Estado terminal: closed. Só fecha se F1..F4 estiverem done/closed.
+      

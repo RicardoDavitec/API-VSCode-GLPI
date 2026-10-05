@@ -1,0 +1,108 @@
+# ============================================================
+#  AGENDA DO ANALISTA — capacidade real e alocacao semanal
+#  Lido por: planeje-a-semana, glpi-weekly-sheet, glpi-capacity-check
+#  PRODUCT-OWNED: o upgrade do kit nunca sobrescreve este arquivo.
+# ============================================================
+schema: 2
+layer: product
+
+analista:
+  nome: "Ricardo David"
+  glpi_login: "rdavid"          # usado no filtro de backlog
+  setor: "Setor de Software — DTI"
+
+# --- Grade de periodos -------------------------------------------------
+# 4 periodos manha + intervalo regulamentar + 4 periodos tarde.
+# M1 e T4 sao SEMPRE reservados (planejamento e intercorrencias).
+grade:
+  periodos_manha: 4
+  periodos_tarde: 4
+  reservados: ["M1", "T4"]
+  rotulo_reservado: "DISPONÍVEL"
+  rotulo_intervalo: "Intervalo Regulamentar"
+
+# --- Jornada por dia ---------------------------------------------------
+jornadas:
+  padrao:                        # seg, ter, qui, sex
+    dias: [seg, ter, qui, sex]
+    manha_inicio: "06:30"
+    manha_fim:    "12:00"
+    intervalo_inicio: "12:00"
+    intervalo_fim:    "12:30"
+    tarde_inicio: "12:30"
+    tarde_fim:    "15:00"
+    # derivado: periodo manha = 82.5 min · tarde = 37.5 min
+  quarta:
+    dias: [qua]
+    manha_inicio: "06:30"
+    manha_fim:    "12:50"
+    intervalo_inicio: "12:50"
+    intervalo_fim:    "15:00"
+    tarde_inicio: "15:00"
+    tarde_fim:    "17:00"
+    # derivado: periodo manha = 95.0 min · tarde = 30.0 min
+    compromissos_fixos:
+      - { nome: "Reunião PET presencial", inicio: "17:00", fim: "18:30",
+          tipo: reuniao, fora_da_grade: true, projeto: PETSD }
+
+# --- Dedicacao: dia -> projeto ----------------------------------------
+dedicacao:
+  seg: BOTPAN
+  ter: BOTPAN
+  qua: PETSD
+  qui: SAMUOP
+  sex: SAMUOP
+
+# --- Projetos monitorados ---------------------------------------------
+projetos:
+  - code: BOTPAN
+    nome: "Botão do Pânico"
+    repo: /home/wsl/projetos/Bot_Pan
+    glpi_project_id: 12
+    planos: docs/05_progresso/planos_ativos
+  - code: SAMUOP
+    nome: "SAMU-Operacional"
+    repo: /home/wsl/projetos/samu_operacional
+    glpi_project_id: null
+    planos: docs/05_progresso/planos_ativos
+  - code: PETSD
+    nome: "PET-Saúde Digital"
+    repo: /home/wsl/projetos/pet_saude_digital
+    glpi_project_id: null
+    planos: docs/05_progresso/planos_ativos
+
+# --- Estrategia de alocacao -------------------------------------------
+alocacao:
+  estrategia: morning-first      # slice | atom | morning-first
+  min_minutos_tarde: 25          # abaixo disso nao aloca na tarde
+  max_ocupacao: 1.0              # rho <= 1 (nao sobrealocar)
+  alerta_ocupacao: 0.85          # aviso acima de 85%
+  agrupar_por_sessao: true       # tarefas da mesma S ficam contiguas
+  prioridade:
+    - estado_doing               # [~] em andamento primeiro
+    - estado_testing             # [t] depois
+    - plan_end_proximo           # prazo mais apertado
+    - fase_menor                 # F1 antes de F2 ...
+
+# --- Backlog ----------------------------------------------------------
+backlog:
+  fontes: [glpi, planos]         # glpi = chamados; planos = P do markdown
+  status_glpi: ["Novo", "Em atendimento", "Pendente"]
+  status_map:
+    todo: "NOVO"
+    doing: "EM ATENDIMENTO"
+    testing: "PENDENTE"
+    done: "SOLUCIONADO"
+    closed: "FECHADO"
+    reservado: "-"
+  itens_fixos:
+    - { rotulo: "DISPONÍVEL", status: "-" }
+    - { rotulo: "REUNIÃO / ADMINISTRATIVO", status: "-" }
+
+# --- Saida ------------------------------------------------------------
+saida:
+  dir: docs/05_progresso/quadros_semanais
+  nome: "quadro_semanal-{ano}_S{semana}.{ext}"
+  formatos: [xlsx, ods, md]
+  template: .glpi/templates/quadro-semanal.xlsx
+  semana_comeca: monday

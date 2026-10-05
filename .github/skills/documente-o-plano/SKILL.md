@@ -1,140 +1,118 @@
 ---
 name: documente-o-plano
-description: "Cria ou atualiza plano de implementacao em docs/05_progresso com hierarquia S/P, checklists e timestamps GLPI. Use quando o usuario pedir documente o plano, documentar plano, criar plano, planejar sprint/sessao ou modelo de planejamento."
-argument-hint: "Modulo (geral|nome-monorepo|modulo-externo) e titulo curto do plano."
+description: >-
+  Cria ou atualiza plano F/S/P com timestamps GLPI. Grava em
+  docs/05_progresso/planos_ativos/ (+ anexos). Encerrado/paralelo -> legados/
+  no mesmo ciclo. Use em documente o plano, criar plano, planejar sprint,
+  planejar sessao, atualizar plano.
+argument-hint: "Titulo curto do plano."
 ---
 
 # Skill: documente-o-plano
 
-Gera planos Markdown **objetivos para humanos** e **denso/previsivel para agentes**, alinhados a `docs/01_requisitos` e ao padrao GLPI (S = fase · P = tarefa).
+Planos Markdown para humanos **e** agentes, alinhados a `docs/01_requisitos`
+(ou `docs/01-requisitos`) e ao padrao GLPI
+**F = fase · S = sessao/sprint/semana · P = tarefa (commit)**.
 
-## Gatilhos
+O plano e a fonte de verdade do que **vai** acontecer (`todo`); os commits sao a
+fonte do que **aconteceu** (`done`). As duas se encontram no mesmo code.
 
-- "documente o plano", "documentar plano", "criar plano", "planejar sprint/sessao"
-- Pedidos de checklist S/P com datas planejadas/reais
+## Linha de producao
 
-## Fluxo obrigatorio
+`docs/05_progresso/planos_ativos/` contem **só** o plano vigente + os anexos
+**desse** plano (regra `.cursor/rules/planos-linha-producao.mdc` se existir).
 
-1. **Contexto**
-   - Confirmar **modulo** destino: `geral` | pasta monorepo | modulo externo.
-   - Ler `docs/01_requisitos/**` (e `docs/01_requisitos/README.md`).
-   - Se a pasta estiver vazia, so com README esqueleto, ou **incoerente** com as metas do plano: **recomendar criar/atualizar requisitos antes** (nao inventar regras de negocio).
-2. **Caminho e nome**
-   ```text
-   docs/05_progresso/<modulo>/<nome_do_plano>-DD_MM_AA-hh_mm.md
-   ```
-   - `nome_do_plano`: slug em minusculas com `_` (sem acentos).
-   - Timestamp = **criacao** no fuso local: `DD_MM_AA-hh_mm` (ex.: `offline_sync-24_07_26-09_40.md`).
-   - Criar `docs/05_progresso/<modulo>/` se nao existir.
-3. **Anexos de detalhe (por S)**
-   - Cada fase **S** deve ter paragrafo resumido **no plano** + link para doc detalhado.
-   - Nome intuitivo correlacionando **S + tema + tempo**, ex.:
-     ```text
-     docs/05_progresso/<modulo>/anexos/S1_<slug>-DD_MM_AA.md
-     ```
-4. **Escrever o plano** com o template abaixo (sem omitir campos obrigatorios).
-5. **Validar checklist temporal** (secao Regras de timestamp) antes de finalizar.
-6. Informar caminho criado e proximos passos (`glpi-retro-scan` / upsert se o usuario quiser sync GLPI).
+- Gravar aqui **somente** se o usuario declarar linha vigente, ou segunda linha
+  **concorrente e explicita**.
+- Rascunho, spike, ideia fechada, plano ja `[x]` -> `docs/05_progresso/legados/`.
+- Encerrar/substituir/paralelizar -> `git mv` para `legados/` **no mesmo ciclo**,
+  levando os anexos junto.
+- Pendencias atemporais -> `docs/05_progresso/pendencias/` (skill `inserir-pendencia`).
 
-## Hierarquia S / P
+Se `planos_ativos/` nao existir: **criar** a pasta + `README.md` + `anexos/`
+(nao voltar ao layout antigo `docs/05_progresso/<modulo>/`).
 
-| Nivel | Significado | Code |
-|-------|-------------|------|
-| **S** | Semana / Sprint / Sessao (fase pai) | `S0`, `S1`, … |
-| **P** | Tarefa filha de um S | `S1.P1`, `S1.P2`, … |
+## Fluxo
 
-Ordem no documento: **S (pai) → Ps (filhos)** em sequencia.
+1. Ler requisitos. Vazios/incoerentes -> **recomendar atualiza-los**; nao inventar RN.
+2. Identificar a **fase** (F1..F5) a que o plano pertence. Um plano pode cobrir
+   mais de uma fase, mas cada S pertence a **exatamente uma**.
+3. Nomear:
+   ~~~text
+   docs/05_progresso/planos_ativos/<nome_do_plano>-DD_MM_AA-hh_mm.md
+   docs/05_progresso/planos_ativos/anexos/F2_S1_<slug>-DD_MM_AA.md
+   ~~~
+4. Cada F -> secao propria. Cada S -> paragrafo no plano + link ao anexo.
+5. Aplicar o template e os timestamps (abaixo). Atualizar `planos_ativos/README.md`.
+6. **Sugerir** (nao executar sem pedido): `glpi-retro-scan`, `glpi-tree-validate`.
 
-## Checklists (obrigatorio)
+## Hierarquia e codificacao
 
-Todo item S e P inicia com um destes marcadores:
+| Nivel | Code | Significado | Vira chamado? |
+|-------|------|-------------|---------------|
+| F (fase) | `F1`..`F5` | PLAN · IMPL · TINT · HOMO · APRO (fixo) | sim — 1o nivel |
+| S (sessao) | `F2.S1`, `F2.S2` | sessao / sprint / semana | sim — 2o nivel |
+| P (tarefa) | `F2.S1.P1` | ~2h, ancorada em commit | sim — 3o nivel |
+| Atomo | — | bullet interno | **nao** — só `content` do P |
 
-| Marcador | Estado |
-|----------|--------|
-| `- [ ]` | Nao iniciado |
-| `- [~]` | Em andamento |
-| `- [x]` ou `- [X]` | Finalizado |
+Fases canonicas: **F1** Planejamento · **F2** Implementacao ·
+**F3** Testes Internos · **F4** Homologacao · **F5** Aprovacao.
 
-Preferir `- [x]` (minusculo) por compatibilidade com o kit; `- [X]` e aceito.
+Codes legados `PR/PH/R/H/I` e `S4` (sem fase) estao **descontinuados**:
 
-## Regras de timestamp (obrigatorio)
+~~~bash
+./tools/glpi/bin/glpi-migrate-codes --dry-run
+~~~
 
-Formato preferido (ISO local): `YYYY-MM-DD HH:MM` (ou `YYYY-MM-DD`).
+## Marcadores e estados
 
-Embutir via comentario HTML na **mesma linha** do checklist ou na **linha seguinte** (compativel com `glpi-retro-scan`):
+| Marcador | Papel | plan_* | real_start | real_end |
+|----------|-------|--------|------------|----------|
+| `- [ ]` | `todo` | obrigatorio | omitir | omitir |
+| `- [~]` | `doing` | obrigatorio | obrigatorio | omitir |
+| `- [t]` | `testing` | obrigatorio | obrigatorio | omitir |
+| `- [x]` | `done` | obrigatorio | obrigatorio | obrigatorio |
+| `- [A]` | `closed` | obrigatorio | obrigatorio | obrigatorio + `accept_ref` |
 
-```html
-<!-- glpi: plan_start="..." plan_end="..." real_start="..." real_end="..." -->
-```
+~~~html
+<!-- glpi: code="F2.S1.P1" plan_start="..." plan_end="..." real_start="..." real_end="..." -->
+~~~
 
-| Estado | `plan_start` / `plan_end` | `real_start` | `real_end` |
-|--------|---------------------------|--------------|------------|
-| `- [ ]` | **Obrigatorio** (estimativa do organograma) | omitir ou vazio | omitir ou vazio |
-| `- [~]` | **Obrigatorio** | **Obrigatorio** | omitir ate concluir |
-| `- [x]` / `- [X]` | **Obrigatorio** | **Obrigatorio** | **Obrigatorio** |
+`- [t]` e `- [A]` sao **novidades**: existem porque a instancia tem estados
+proprios de "Testando" e "Fechado" que o modelo antigo nao usava.
 
-Datas planejadas devem respeitar o organograma (S cobre o intervalo dos Ps; Ps nao ultrapassam o S pai sem justificativa explicita).
+## Regras duras
 
-## Template do plano
+- **Nao inventar `real_*`.** Sem dado -> omitir o atributo.
+- **Nao inventar RN** (regra de negocio). Requisito faltante -> acao de documentar.
+- **Nao commitar secrets** no plano nem nos anexos.
+- Plano principal **curto** (organograma + 1 paragrafo por S); detalhe nos anexos.
+- Janela do filho contida na do pai (sera cobrado por V04 no validate).
+- P com mais de 4h -> quebrar (sera cobrado por V11).
+- Numeracao de S continua **por fase**: a 1a sessao de F3 e `F3.S1`, nao `F3.S8`.
 
-```markdown
-# Plano: <Titulo legivel>
+## Template
 
-> Criado: DD/MM/AAAA hh:mm · Modulo: `<modulo>` · Arquivo: `<nome>-DD_MM_AA-hh_mm.md`
-> Requisitos: ver `docs/01_requisitos/` (listar arquivos consultados)
+Ver `docs/05_progresso/planos_ativos/README.md` e o exemplo canonico
+`.glpi/templates/template-exemplo.md`.
 
-## Objetivo
+## Integracao com o GLPI
 
-<1–3 frases. Meta mensuravel.>
-
-## Requisitos de negocio (vinculo)
-
-- [obrigatorio] Conferir `docs/01_requisitos/…`
-- Se ausentes/incoerentes: **ACAO** — criar/atualizar requisitos antes de executar o plano.
-- Lista curta: RN-id ou arquivo → trecho que o plano respeita.
-
-## Organograma (resumo)
-
-| Code | Titulo | Status | Plan ini | Plan fim |
-|------|--------|--------|----------|----------|
-| S1 | … | [ ] | … | … |
-| S1.P1 | … | [ ] | … | … |
-
-## Fases e tarefas
-
-### S1 — <Titulo da fase>
-
-- [ ] **S1** <Titulo da fase>
-  <Paragrafo resumido (3–6 linhas): escopo, criterio de aceite, risco.>
-  Detalhe: [`anexos/S1_<slug>-DD_MM_AA.md`](./anexos/S1_<slug>-DD_MM_AA.md)
-  <!-- glpi: plan_start="YYYY-MM-DD HH:MM" plan_end="YYYY-MM-DD HH:MM" -->
-
-  - [ ] **S1.P1** <Titulo tarefa>
-    Criterio: <teste/aceite curto>
-    <!-- glpi: plan_start="YYYY-MM-DD HH:MM" plan_end="YYYY-MM-DD HH:MM" -->
-
-  - [~] **S1.P2** <Titulo>
-    Criterio: …
-    <!-- glpi: plan_start="..." plan_end="..." real_start="YYYY-MM-DD HH:MM" -->
-
-  - [x] **S1.P3** <Titulo>
-    Criterio: …
-    <!-- glpi: plan_start="..." plan_end="..." real_start="..." real_end="..." -->
-```
-
-Exemplo completo: [template-exemplo.md](template-exemplo.md).
-
-## Regras essenciais
-
-- Nao ferir regras de negocio de `docs/01_requisitos`; se faltarem, **recomendar cria-las**.
-- Plano curto no arquivo principal; detalhe longo so nos anexos linkados.
-- Nao inventar timestamps reais; so preencher `real_*` com fatos (sessao/commit/confirmacao do usuario).
-- Nao commitar secrets.
-- Apos criar, sugerir (nao executar sem pedido): `./tools/glpi/bin/glpi-retro-scan` apontando o workspace/plano.
-
-## Relacao com outras skills
-
-- `documentar` — updates pontuais no plano vigente
-- `oncoto-oncovo` — situacao atual vs plano
-- `encerrar-sessao` — registro diario (nao substitui o plano)
-- `glpi-retro-scan` / `glpi-task-upsert` — sync S/P → GLPI
+~~~text
+documente-o-plano   ->  plano com codes F/S/P e estados todo
+        |
+        v
+glpi-retro-scan     ->  JSON de candidatos (le os codes do plano)
+        |
+        v
+glpi-tree-validate  ->  exit 0 obrigatorio
+        |
+        v
+glpi-retro-apply    ->  cria F/S/P no GLPI
+        |
+        v
+glpi-commit-harvest ->  commits fecham os P (todo -> done)
+        |
+        v
+glpi-progress-rollup -> consolida % e estados para cima
+~~~

@@ -1,0 +1,51 @@
+# Overlay da instituicao PMF Franca. Só os DELTAS sobre model.defaults.yaml.
+schema: 2
+layer: preset
+preset: api-vscode-glpi
+label: "API-VSCode-GLPI (PMF Franca)"
+
+# PMF usa fase como SUBPROJETO — evidencia: .glpi/hierarchy.yaml aponta
+# as fases para front/project.form.php (ids 27,28,29,24,25,30 sob o pai 12).
+topology:
+  phase_as: subproject
+
+lifecycle:
+  template: pmf-5-phases
+  phases:
+    - { code: F1, name: "Planejamento" }
+    - { code: F2, name: "Implementação" }
+    - { code: F3, name: "Testes Internos" }
+    - { code: F4, name: "Homologação" }
+    - { code: F5, name: "Aprovação" }
+
+# Traducao papel semantico -> alias GEP (ids em maps/states.json)
+state_bindings:
+  todo:    gep1      # 8   GEP 1. Produto Backlog
+  doing:   gep3      # 10  GEP 3. Fazendo
+  testing: gep4      # 11  GEP 4. Testando
+  done:    gep7      # 13  GEP 7. Feito
+  closed:  gep9      # 15  GEP 9. Fechado
+
+naming:
+  root: "GEP - {produto} - 0. [PAI]"
+
+# Taxonomia legada institucional (Discovery -> Evolucao).
+# IDs ficam no PRODUTO (.glpi/maps/phase-map.json), nunca aqui.
+legacy_taxonomy:
+  "1":   { to: F1, label: "1. Discovery",                   demote_to: "F1.S1" }
+  "2":   { to: F1, label: "2. Análise",                     demote_to: "F1.S2" }
+  "3":   { to: F1, label: "3. Projeto",                     demote_to: "F1.S3" }
+  "4.1": { to: F2, label: "4.1 Implementação Front-end",    demote_to: "F2.S1" }
+  "4.2": { to: F2, label: "4.2 Implementação Back-end",     demote_to: "F2.S2" }
+  "5":   { to: F4, label: "5. Homologação",                 demote_to: "F4.S1" }
+  "6":   { to: F5, label: "6. Evolução",                    demote_to: "F5.S1" }
+new_without_legacy: ["F3"]
+
+docs_layout:
+  requisitos: docs/01_requisitos
+  planos: docs/05_progresso/planos_ativos
+  anexos: docs/05_progresso/planos_ativos/anexos
+  legados: docs/05_progresso/legados
+  pendencias: docs/05_progresso/pendencias
+  glpi: docs/06_glpi
+  retro_scans: docs/06_glpi/retro-scans

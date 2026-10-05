@@ -1,0 +1,111 @@
+# ============================================================
+#  CONTRATO BASE DO MODELO ORGANIZACIONAL  —  NAO EDITAR
+#  Editar: .glpi/presets/<preset>/model.overlay.yaml  (instituicao)
+#          .glpi/model.yaml                            (produto)
+#  Lido por: todas as skills/CLI glpi-*
+# ============================================================
+schema: 2
+layer: kit
+revision: "2026-10-05"
+
+# --- Topologia: como os 4 niveis caem na API do GLPI ---------
+topology:
+  # projecttask = fase como ProjectTask (menos permissao, sem campo code)
+  # subproject   = fase como Project filho (tem campo code nativo; exige
+  #                permissao de criar Project e update_project)
+  phase_as: projecttask         # DEFAULT GENERICO
+  root_itemtype: Project
+  session_itemtype: ProjectTask
+  task_itemtype: ProjectTask
+  max_depth: 3                  # F / S / P  (atomo nao e objeto)
+  atom_as: content              # atomo vive no campo content do P
+
+# --- Codificacao (independente de instituicao) ---------------
+codes:
+  pattern: '^(?:(?<proj>[A-Z0-9_]{2,12}):)?F(?<f>\d{1,2})(?:\.S(?<s>\d{1,3}))?(?:\.P(?<p>\d{1,4}))?$'
+  separator: "."
+  phase_code_field: auto        # auto = "code" se subproject, senao prefixo no name
+  task_name_pattern: '[{code}] {title}'
+  meta_marker: '<!-- glpi-meta: code="{code}" level="{level}" src="{src}" -->'
+  index_cache: .glpi/index.json
+
+# --- Ciclo de vida: 5 fases NEUTRAS (sem jargao local) -------
+lifecycle:
+  template: lifecycle-5-phases
+  phases:
+    - { code: F1, alias: PLAN, name: "Planejamento",    weight: 0.10 }
+    - { code: F2, alias: IMPL, name: "Implementacao",   weight: 0.40 }
+    - { code: F3, alias: TINT, name: "Testes Internos", weight: 0.20 }
+    - { code: F4, alias: HOMO, name: "Homologacao",     weight: 0.20 }
+    - { code: F5, alias: APRO, name: "Aprovacao",       weight: 0.10 }
+  weight_sum_tolerance: 0.001
+
+# --- Evidencias por fase (heuristica de caminho) -------------
+evidence:
+  F1: ["docs/01_requisitos", "docs/01-requisitos", "docs/05_progresso/planos_ativos", "docs/00_visao"]
+  F2: ["src", "app", "lib", "api", "frontend", "backend", "packages"]
+  F3: ["tests", "test", "spec", "__tests__", "cypress", ".github/workflows", "ci"]
+  F4: ["docs/07_homologacao", "deploy/homolog", "evidencias", "homolog"]
+  F5: ["docs/08_aceite", "CHANGELOG.md", "docs/09_entrega"]
+
+# --- Conventional commits -> fase ----------------------------
+commit_rules:
+  F1: ["docs", "spec", "chore(plan)", "chore(docs)", "rfc"]
+  F2: ["feat", "fix", "refactor", "perf", "style", "build"]
+  F3: ["test", "ci", "chore(test)"]
+  F4: ["deploy(homolog)", "chore(homolog)"]
+  F5: ["release", "chore(release)", "tag"]
+branch_rules:
+  F4: ["homolog", "homologacao", "release/*", "uat/*"]
+  F5: ["main", "master", "production"]
+
+# --- Estados: papeis SEMANTICOS (ids vem do preset) ----------
+# As skills SEMPRE falam em todo/doing/testing/done/closed.
+# O preset traduz para alias -> projectstates_id da instancia.
+state_roles: [todo, doing, testing, done, closed]
+state_rules:
+  todo:    { real_start: empty,    real_end: empty,    percent: "0" }
+  doing:   { real_start: required, real_end: empty,    percent: "1..99" }
+  testing: { real_start: required, real_end: empty,    percent: "80..99" }
+  done:    { real_start: required, real_end: required, percent: "100" }
+  closed:  { real_start: required, real_end: required, percent: "100", requires_accept_ref: true }
+transitions:
+  todo:    [doing]
+  doing:   [testing, done]
+  testing: [doing, done]
+  done:    [closed, doing]
+  closed:  []
+markers:
+  "[ ]": todo
+  "[~]": doing
+  "[t]": testing
+  "[x]": done
+  "[A]": closed
+
+# --- Esforco e rollup ----------------------------------------
+effort:
+  task_hours_default: 2
+  task_hours_max: 4
+  session_hours_target: 16
+rollup:
+  mode: weighted               # weighted | simple | manual
+  tolerance_pp: 1
+  propagate_state: true
+sessions:
+  window: week                 # day | week | sprint | branch
+  week_start: monday
+  naming: "S{n} — {titulo}"
+
+# --- Seguranca -----------------------------------------------
+safety:
+  dry_run_default: true
+  require_confirm_on_apply: true
+  deny_attach: ["*.env", ".env*", "*.pem", "id_rsa*", "*.key", "*secret*", "*.p12", "*token*"]
+  deny_content_regex:
+    - '(?i)(app[-_]?token|user[-_]?token|session[-_]?token)\s*[:=]'
+    - '(?i)password\s*[:=]\s*\S+'
+    - 'Bearer\s+[A-Za-z0-9._-]{20,}'
+legacy:
+  reverse_policy: forbid       # migracao F->legado e proibida (phi nao e injetiva)
+  never_delete: true           # subprojetos/tasks legados nunca sao apagados
+  

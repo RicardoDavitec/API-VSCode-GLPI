@@ -1,29 +1,29 @@
 ---
 name: glpi-project-create
-description: "Cria Project no GLPI (nome, codigo, estado GEP, datas). Dry-run por padrao."
+description: "DEPRECATED alias de glpi-project-upsert. Redireciona para a skill primaria; nao usar em novos fluxos."
 ---
 
-# Skill: glpi-project-create
+# Skill: glpi-project-create (deprecated)
 
-Cria um **Project** novo na API GLPI. Usar quando o produto ainda nao tem `project_id` no `.glpi/project.yaml`.
+**Deprecated desde o kit v2.0.0 (modelo F/S/P, schema 2).**
 
-## Comando
+Preferir **`glpi-project-upsert`**.
 
-```bash
-./tools/glpi/bin/glpi-project-create --name="Nome do produto" --code=CODIGO \
-  --state=gep1 --priority=3 --content="Descricao"
-# grava:
-./tools/glpi/bin/glpi-project-create --name="..." --code=... --state=gep1 --apply
-```
+Se acionada pelo nome legado, carregar e seguir **integralmente**
+[`.github/skills/glpi-project-upsert/SKILL.md`](../glpi-project-upsert/SKILL.md).
 
-Apos criar, atualizar `.glpi/project.yaml` com o `project_id` retornado, depois:
+Motivo: a skill antiga só **criava**. A nova cobre criar, renomear, redescrever,
+mudar estado/datas/prioridade/responsavel e atuar tambem sobre subprojetos de fase.
 
-1. `./tools/glpi/bin/glpi-seed-phases --template=samu-s-phases`
-2. `./tools/glpi/bin/glpi-retro-scan`
-3. `./tools/glpi/bin/glpi-retro-apply --from=JSON` (depois `--apply`)
+Equivalencia:
 
-## Referencias
+~~~bash
+# antes
+./tools/glpi/bin/glpi-project-create --name="X" --code=X --state=gep1 --apply
+# agora
+./tools/glpi/bin/glpi-project-upsert --name="X" --code=X --state=todo --apply
+~~~
 
-- `docs/06_glpi/HIERARQUIA_S_P_GLPI.md`
-- `.glpi/maps/states.json`
-- `docs/06_glpi/MANUAL_USO_GLPI.md`
+Atencao: a antiga sugeria `glpi-seed-phases --template=samu-s-phases`, que
+semeava `S0..S7` como fases — no modelo atual essas sao **sessoes**.
+Use `glpi-phase-ensure --all` para as 5 fases reais.

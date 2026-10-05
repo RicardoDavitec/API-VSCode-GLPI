@@ -1,0 +1,20 @@
+# Herda lifecycle-5-phases; só renomeia e fixa estados GEP.
+template_id: pmf-5-phases
+extends: lifecycle-5-phases
+schema: 2
+layer: preset
+creates: subprojects
+defaults:
+  projectstates_alias: gep1
+  is_recursive: 0
+overrides:
+  F1: { name: "Planejamento",    note: "consolida legado 1 Discovery + 2 Análise + 3 Projeto" }
+  F2: { name: "Implementação",   note: "consolida legado 4.1 Front-end + 4.2 Back-end" }
+  F3: { name: "Testes Internos", note: "FASE NOVA — sem equivalente legado PMF", state: gep1 }
+  F4: { name: "Homologação",     note: "legado 5. Homologação" }
+  F5: { name: "Aprovação",       note: "legado 6. Evolução / encerramento", state: gep1 }
+deprecates:
+  - corporate-phases        # 7 fases como subprojetos
+  - botpan-phases           # idem, com IDs do Bot_Pan
+  - samu-s-phases           # semeia S0..S7 como "fases" (sao SESSOES no v2)
+  - product-s-phases.example

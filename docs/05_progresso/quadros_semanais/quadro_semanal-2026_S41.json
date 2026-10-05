@@ -1,0 +1,442 @@
+{
+  "gerado_em": "2026-10-05T13:13:54",
+  "semana": "2026-W41",
+  "analista": "Ricardo David",
+  "estrategia": "morning-first",
+  "arquivos": [
+    "docs/05_progresso/quadros_semanais/quadro_semanal-2026_S41.md"
+  ],
+  "dias": [
+    {
+      "sigla": "seg",
+      "data": "2026-10-05",
+      "projeto": "BOTPAN",
+      "capacidade_min": 360.0,
+      "ocupado_min": 0.0,
+      "rho": 0.0,
+      "periodos": [
+        {
+          "id": "M1",
+          "inicio": "06:30",
+          "fim": "07:52",
+          "minutos": 82.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M2",
+          "inicio": "07:52",
+          "fim": "09:15",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M3",
+          "inicio": "09:15",
+          "fim": "10:37",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M4",
+          "inicio": "10:37",
+          "fim": "12:00",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T1",
+          "inicio": "12:30",
+          "fim": "13:07",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T2",
+          "inicio": "13:07",
+          "fim": "13:45",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T3",
+          "inicio": "13:45",
+          "fim": "14:22",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T4",
+          "inicio": "14:22",
+          "fim": "15:00",
+          "minutos": 37.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        }
+      ],
+      "fixos": []
+    },
+    {
+      "sigla": "ter",
+      "data": "2026-10-06",
+      "projeto": "BOTPAN",
+      "capacidade_min": 360.0,
+      "ocupado_min": 0.0,
+      "rho": 0.0,
+      "periodos": [
+        {
+          "id": "M1",
+          "inicio": "06:30",
+          "fim": "07:52",
+          "minutos": 82.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M2",
+          "inicio": "07:52",
+          "fim": "09:15",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M3",
+          "inicio": "09:15",
+          "fim": "10:37",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M4",
+          "inicio": "10:37",
+          "fim": "12:00",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T1",
+          "inicio": "12:30",
+          "fim": "13:07",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T2",
+          "inicio": "13:07",
+          "fim": "13:45",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T3",
+          "inicio": "13:45",
+          "fim": "14:22",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T4",
+          "inicio": "14:22",
+          "fim": "15:00",
+          "minutos": 37.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        }
+      ],
+      "fixos": []
+    },
+    {
+      "sigla": "qua",
+      "data": "2026-10-07",
+      "projeto": "PETSD",
+      "capacidade_min": 375.0,
+      "ocupado_min": 0.0,
+      "rho": 0.0,
+      "periodos": [
+        {
+          "id": "M1",
+          "inicio": "06:30",
+          "fim": "08:05",
+          "minutos": 95.0,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M2",
+          "inicio": "08:05",
+          "fim": "09:40",
+          "minutos": 95.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M3",
+          "inicio": "09:40",
+          "fim": "11:15",
+          "minutos": 95.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M4",
+          "inicio": "11:15",
+          "fim": "12:50",
+          "minutos": 95.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T1",
+          "inicio": "15:00",
+          "fim": "15:30",
+          "minutos": 30.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T2",
+          "inicio": "15:30",
+          "fim": "16:00",
+          "minutos": 30.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T3",
+          "inicio": "16:00",
+          "fim": "16:30",
+          "minutos": 30.0,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T4",
+          "inicio": "16:30",
+          "fim": "17:00",
+          "minutos": 30.0,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        }
+      ],
+      "fixos": [
+        {
+          "nome": "Reunião PET presencial",
+          "inicio": "17:00",
+          "fim": "18:30",
+          "tipo": "reuniao",
+          "fora_da_grade": true,
+          "projeto": "PETSD"
+        }
+      ]
+    },
+    {
+      "sigla": "qui",
+      "data": "2026-10-08",
+      "projeto": "SAMUOP",
+      "capacidade_min": 360.0,
+      "ocupado_min": 0.0,
+      "rho": 0.0,
+      "periodos": [
+        {
+          "id": "M1",
+          "inicio": "06:30",
+          "fim": "07:52",
+          "minutos": 82.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M2",
+          "inicio": "07:52",
+          "fim": "09:15",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M3",
+          "inicio": "09:15",
+          "fim": "10:37",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M4",
+          "inicio": "10:37",
+          "fim": "12:00",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T1",
+          "inicio": "12:30",
+          "fim": "13:07",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T2",
+          "inicio": "13:07",
+          "fim": "13:45",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T3",
+          "inicio": "13:45",
+          "fim": "14:22",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T4",
+          "inicio": "14:22",
+          "fim": "15:00",
+          "minutos": 37.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        }
+      ],
+      "fixos": []
+    },
+    {
+      "sigla": "sex",
+      "data": "2026-10-09",
+      "projeto": "SAMUOP",
+      "capacidade_min": 360.0,
+      "ocupado_min": 0.0,
+      "rho": 0.0,
+      "periodos": [
+        {
+          "id": "M1",
+          "inicio": "06:30",
+          "fim": "07:52",
+          "minutos": 82.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M2",
+          "inicio": "07:52",
+          "fim": "09:15",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M3",
+          "inicio": "09:15",
+          "fim": "10:37",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "M4",
+          "inicio": "10:37",
+          "fim": "12:00",
+          "minutos": 82.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T1",
+          "inicio": "12:30",
+          "fim": "13:07",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T2",
+          "inicio": "13:07",
+          "fim": "13:45",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T3",
+          "inicio": "13:45",
+          "fim": "14:22",
+          "minutos": 37.5,
+          "reservado": false,
+          "tarefa": null,
+          "titulo": null
+        },
+        {
+          "id": "T4",
+          "inicio": "14:22",
+          "fim": "15:00",
+          "minutos": 37.5,
+          "reservado": true,
+          "tarefa": null,
+          "titulo": null
+        }
+      ],
+      "fixos": []
+    }
+  ],
+  "backlog": [],
+  "resumo": {
+    "capacidade_h": 30.25,
+    "alocado_h": 0.0,
+    "tarefas_alocadas": 0,
+    "tarefas_backlog": 0
+  }
+}

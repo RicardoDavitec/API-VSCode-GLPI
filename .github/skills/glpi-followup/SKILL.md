@@ -5,12 +5,24 @@ description: "DEPRECATED alias de acompanhar-chamado. Use acompanhar-chamado (ac
 
 # Skill: glpi-followup (deprecated)
 
-**Deprecated.** Preferir a skill **`acompanhar-chamado`**.
+**Deprecated.** Preferir **`acompanhar-chamado`**.
 
-Se esta skill for acionada (nome legado `glpi-followup`), carregar e seguir **integralmente** [`.github/skills/acompanhar-chamado/SKILL.md`](../acompanhar-chamado/SKILL.md) — titulo sugerido + edicao/default, envio `ITILFollowup`, anexo opcional.
+Se acionada pelo nome legado, carregar e seguir **integralmente**
+[`.github/skills/acompanhar-chamado/SKILL.md`](../acompanhar-chamado/SKILL.md)
+— titulo sugerido + edicao/default, envio `ITILFollowup`, anexo opcional.
 
-CLI (inalterado):
+## Novidade do modelo F/S/P
 
-```bash
-./tools/glpi/bin/glpi-followup - "<texto>"
-```
+O acompanhamento deve declarar o **no ancora** para que o texto cite fase,
+sessao e tarefa — sem isso o registro fica sem rastreio hierarquico.
+
+~~~bash
+./tools/glpi/bin/glpi-followup - "<texto>"                 # legado, sem ancora
+./tools/glpi/bin/glpi-followup --code=F2.S4 - "<texto>"    # com ancora
+~~~
+
+Preferir:
+
+~~~bash
+./tools/glpi/bin/glpi-followup-upsert --code=F2.S4.P5 --from-commits --apply
+~~~

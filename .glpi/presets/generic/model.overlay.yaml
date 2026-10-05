@@ -1,0 +1,18 @@
+# Overlay minimo do preset generic: nada a sobrescrever além do binding
+# de estados, que é descoberto na instalacao (glpi states discover).
+schema: 2
+layer: preset
+preset: generic
+label: "Generic GLPI (API REST)"
+topology:
+  phase_as: projecttask      # menor requisito de permissao
+lifecycle:
+  template: lifecycle-5-phases
+state_bindings:
+  todo:    new
+  doing:   in_progress
+  testing: in_progress
+  done:    closed
+  closed:  closed
+legacy_taxonomy: {}
+new_without_legacy: ["F1","F2","F3","F4","F5"]
