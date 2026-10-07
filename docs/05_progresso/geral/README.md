@@ -16,6 +16,7 @@ Modulo = `geral` | pasta monorepo | modulo externo. Hierarquia S/P + comentarios
 
 | Data | Arquivo |
 |------|---------|
+| 2026-10-07 | [`SESSAO_2026-10-07_correcoes-nomenclatura-fsp.md`](SESSAO_2026-10-07_correcoes-nomenclatura-fsp.md) |
 | 2026-07-24 | [`SESSAO_2026-07-24_skills-plano-atualizar-kit.md`](SESSAO_2026-07-24_skills-plano-atualizar-kit.md) |
 | 2026-07-22 | [`SESSAO_2026-07-22_retro-homolog-glpi.md`](SESSAO_2026-07-22_retro-homolog-glpi.md) |
 | 2026-07-21 | [`SESSAO_2026-07-21_integracao-glpi-kit-botpan.md`](SESSAO_2026-07-21_integracao-glpi-kit-botpan.md) |
