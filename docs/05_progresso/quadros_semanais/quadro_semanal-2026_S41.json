@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-10-05T13:13:54",
+  "gerado_em": "2026-10-06T15:24:17",
   "semana": "2026-W41",
   "analista": "Ricardo David",
   "estrategia": "morning-first",
@@ -12,8 +12,8 @@
       "data": "2026-10-05",
       "projeto": "BOTPAN",
       "capacidade_min": 360.0,
-      "ocupado_min": 0.0,
-      "rho": 0.0,
+      "ocupado_min": 360.0,
+      "rho": 1.0,
       "periodos": [
         {
           "id": "M1",
@@ -30,8 +30,8 @@
           "fim": "09:15",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S1.P6",
+          "titulo": "Agentes e skill commit v2"
         },
         {
           "id": "M3",
@@ -39,8 +39,8 @@
           "fim": "10:37",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S1.P6",
+          "titulo": "Agentes e skill commit v2"
         },
         {
           "id": "M4",
@@ -48,8 +48,8 @@
           "fim": "12:00",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P1",
+          "titulo": "Gravar arquivos de configuracao do kit"
         },
         {
           "id": "T1",
@@ -57,8 +57,8 @@
           "fim": "13:07",
           "minutos": 37.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P1",
+          "titulo": "Gravar arquivos de configuracao do kit"
         },
         {
           "id": "T2",
@@ -66,8 +66,8 @@
           "fim": "13:45",
           "minutos": 37.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P2",
+          "titulo": "Gravar skills e agentes"
         },
         {
           "id": "T3",
@@ -75,8 +75,8 @@
           "fim": "14:22",
           "minutos": 37.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P2",
+          "titulo": "Gravar skills e agentes"
         },
         {
           "id": "T4",
@@ -95,8 +95,8 @@
       "data": "2026-10-06",
       "projeto": "BOTPAN",
       "capacidade_min": 360.0,
-      "ocupado_min": 0.0,
-      "rho": 0.0,
+      "ocupado_min": 240.0,
+      "rho": 0.6667,
       "periodos": [
         {
           "id": "M1",
@@ -113,8 +113,8 @@
           "fim": "09:15",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P3",
+          "titulo": "Testar upgrade-into.sh em clone descartavel"
         },
         {
           "id": "M3",
@@ -122,8 +122,8 @@
           "fim": "10:37",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P3",
+          "titulo": "Testar upgrade-into.sh em clone descartavel"
         },
         {
           "id": "M4",
@@ -131,8 +131,8 @@
           "fim": "12:00",
           "minutos": 82.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P4",
+          "titulo": "Atualizar README e docs/06_glpi"
         },
         {
           "id": "T1",
@@ -140,8 +140,8 @@
           "fim": "13:07",
           "minutos": 37.5,
           "reservado": false,
-          "tarefa": null,
-          "titulo": null
+          "tarefa": "F1.S2.P4",
+          "titulo": "Atualizar README e docs/06_glpi"
         },
         {
           "id": "T2",
@@ -435,8 +435,8 @@
   "backlog": [],
   "resumo": {
     "capacidade_h": 30.25,
-    "alocado_h": 0.0,
-    "tarefas_alocadas": 0,
+    "alocado_h": 10.0,
+    "tarefas_alocadas": 5,
     "tarefas_backlog": 0
   }
 }
